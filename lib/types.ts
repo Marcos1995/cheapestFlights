@@ -2,9 +2,15 @@ export type Cabin = "ECONOMY" | "PREMIUM_ECONOMY" | "BUSINESS" | "FIRST";
 
 export type EmptyReason = "unknown_route" | "same_airport" | "past_date" | "bad_return";
 
+export const ANY_DEST = "ANY";
+
 export type Airline = { code: string; name: string };
 
 export type Leg = {
+  from: string;
+  to: string;
+  fromName: string;
+  toName: string;
   depart: string;
   arrive: string;
   durationMin: number;
@@ -24,6 +30,8 @@ export type LiveFlight = {
   outbound: Leg;
   inbound: Leg | null;
   selfTransfer: boolean;
+  ticketedDest: string;
+  ticketedName: string;
 };
 
 export type SearchParams = {
@@ -38,16 +46,9 @@ export type SearchParams = {
   airline: string;
 };
 
-export type ErrorCompare = {
-  refDate: string;
-  refLabel: string;
-  nowPrice: number | null;
-  refPrice: number | null;
-  savedEur: number | null;
-  looksLikeError: boolean;
-  nowFlight: LiveFlight | null;
-  refFlight: LiveFlight | null;
-};
+export function isAnywhere(dest: string): boolean {
+  return dest === ANY_DEST || dest.toLowerCase() === "anywhere";
+}
 
 export function isPastDate(date: string, now = new Date()): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return true;
@@ -61,6 +62,13 @@ export function addDays(iso: string, days: number): string {
   const [y, m, d] = iso.split("-").map(Number);
   const dt = new Date(y, m - 1, d + days);
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+
+export function shiftReturn(oldOut: string, oldRet: string, newOut: string): string {
+  const [y1, m1, d1] = oldOut.split("-").map(Number);
+  const [y2, m2, d2] = oldRet.split("-").map(Number);
+  const days = Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000);
+  return addDays(newOut, days);
 }
 
 export function skyDate(iso: string): string {
@@ -93,3 +101,7 @@ export function errorCompare(nowPrice: number | null, refPrice: number | null): 
   const looksLikeError = nowPrice <= refPrice * 0.75 && savedEur >= 25;
   return { savedEur, looksLikeError };
 }
+
+export const ALT_OFFSETS = [2, 3, 5, 7, 10, 15] as const;
+export const ANY_ALT_OFFSETS = [3, 5, 10, 15] as const;
+

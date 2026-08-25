@@ -1,4 +1,4 @@
-import type { Airline, Cabin, Leg, LiveFlight } from "./types";
+import { isAnywhere, type Airline, type Cabin, type Leg, type LiveFlight } from "./types";
 import { kiwiBookingUrl } from "./links";
 
 const ONEWAY = `query SearchOneWayItinerariesQuery($search: SearchOnewayInput, $filter: ItinerariesFilterInput, $options: ItinerariesOptionsInput) {
@@ -56,8 +56,8 @@ const ROUND = `query SearchReturnItinerariesQuery($search: SearchReturnInput, $f
 
 type Seg = {
   segment?: {
-    source?: { station?: { code?: string }; localTime?: string };
-    destination?: { station?: { code?: string }; localTime?: string };
+    source?: { station?: { code?: string; name?: string }; localTime?: string };
+    destination?: { station?: { code?: string; name?: string }; localTime?: string };
     duration?: number;
     carrier?: { code?: string; name?: string };
   };
@@ -97,6 +97,10 @@ function parseLeg(sector: Sector | undefined): Leg | null {
   }
   const durationMin = Math.round((sector?.duration ?? segs.reduce((n, s) => n + (s?.duration ?? 0), 0)) / 60);
   return {
+    from: first.source?.station?.code ?? "",
+    to: last.destination?.station?.code ?? "",
+    fromName: first.source?.station?.name ?? first.source?.station?.code ?? "",
+    toName: last.destination?.station?.name ?? last.destination?.station?.code ?? "",
     depart: clock(first.source?.localTime),
     arrive: clock(last.destination?.localTime),
     durationMin,
@@ -157,6 +161,8 @@ export function parseItineraries(raw: unknown, roundTrip: boolean): LiveFlight[]
       outbound,
       inbound,
       selfTransfer: airlines.length > 1,
+      ticketedDest: outbound.to,
+      ticketedName: outbound.toName,
     });
   }
   return out.sort((a, b) => a.priceEur - b.priceEur);
@@ -182,8 +188,8 @@ function filterInput(limit: number, maxStops: number) {
     allowChangeInboundSource: true,
     allowDifferentStationConnection: true,
     enableSelfTransfer: true,
-    enableThrowAwayTicketing: false,
-    enableTrueHiddenCity: false,
+    enableThrowAwayTicketing: true,
+    enableTrueHiddenCity: true,
     transportTypes: ["FLIGHT"],
     contentProviders: ["KIWI", "FRESH"],
     flightsApiLimit: limit,
@@ -216,9 +222,10 @@ export async function fetchKiwiFlights(p: {
   limit?: number;
 }): Promise<LiveFlight[]> {
   const roundTrip = Boolean(p.returnDate);
+  const destId = isAnywhere(p.dest) ? "anywhere" : p.dest;
   const itinerary: Record<string, unknown> = {
     source: { ids: [p.origin] },
-    destination: { ids: [p.dest] },
+    destination: { ids: [destId] },
     outboundDepartureDate: { start: `${p.date}T00:00:00`, end: `${p.date}T23:59:59` },
   };
   if (p.returnDate) {
@@ -233,7 +240,7 @@ export async function fetchKiwiFlights(p: {
       passengers: passengers(p.adults, p.bags),
       cabinClass: { cabinClass: p.cabin, applyMixedClasses: false },
     },
-    filter: filterInput(p.limit ?? 18, 3),
+    filter: filterInput(p.limit ?? (isAnywhere(p.dest) ? 28 : 20), 3),
     options: options(),
   };
   const feature = roundTrip ? "SearchReturnItinerariesQuery" : "SearchOneWayItinerariesQuery";

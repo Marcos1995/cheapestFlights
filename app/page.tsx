@@ -12,8 +12,8 @@ export default function HomePage() {
           </div>
         </div>
         <p>
-          Busca ida o ida y vuelta, con pasajeros y clase. Precios reales de Kiwi, y un clic te lleva
-          a reservar o a comprobarlo en Google Flights y Skyscanner.
+          Busca ida o ida y vuelta, o desde un aeropuerto a cualquier destino. Primero las tarifas
+          error, luego ciudad oculta, después lo normal.
         </p>
         <div className="stamp">precios reales</div>
       </header>

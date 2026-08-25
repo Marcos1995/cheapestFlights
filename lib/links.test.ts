@@ -90,5 +90,14 @@ test("parser reads a live Kiwi one-way payload", () => {
   assert.equal(flights[0].outbound.depart, "20:15");
   assert.equal(flights[0].stopCount, 0);
   assert.equal(flights[0].airlines[0].code, "FR");
+  assert.equal(flights[0].ticketedDest, "FCO");
   assert.equal(flights[0].bookingUrl, "https://www.kiwi.com/es/booking/?token=t");
+});
+
+test("anywhere links drop the destination airport", () => {
+  const p = { origin: "BCN", dest: "ANY", date: "2026-09-15", adults: 1, cabin: "ECONOMY" as const };
+  assert.match(googleFlightsUrl(p), /desde/);
+  assert.match(decodeURIComponent(googleFlightsUrl(p)), /desde BCN/);
+  assert.match(skyscannerUrl(p), /vuelos-desde\/bcn\/260915/);
+  assert.match(kiwiSearchUrl(p), /\/bcn\/anywhere\/2026-09-15/);
 });

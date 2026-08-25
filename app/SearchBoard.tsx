@@ -5,12 +5,14 @@ import { AirportField } from "./AirportField";
 import { getAirport, labelAirport } from "@/lib/airports";
 import { fetchKiwiFlights, filterFlights } from "@/lib/kiwi";
 import { airlineLogo, googleFlightsUrl, kiwiSearchUrl, skyscannerUrl } from "@/lib/links";
+import { altOffsetsFor, dateHints, rankFlights } from "@/lib/rank";
 import {
   addDays,
   defaultDate,
-  errorCompare,
+  isAnywhere,
   isPastDate,
   referenceDate,
+  shiftReturn,
   type Cabin,
   type EmptyReason,
   type LiveFlight,
@@ -60,8 +62,9 @@ const EMPTY: Record<EmptyReason, string> = {
 
 function validate(p: SearchParams, now = new Date()): EmptyReason | null {
   if (isPastDate(p.date, now)) return "past_date";
-  if (!getAirport(p.origin) || !getAirport(p.dest)) return "unknown_route";
-  if (p.origin === p.dest) return "same_airport";
+  if (!getAirport(p.origin)) return "unknown_route";
+  if (!isAnywhere(p.dest) && !getAirport(p.dest)) return "unknown_route";
+  if (!isAnywhere(p.dest) && p.origin === p.dest) return "same_airport";
   if (p.returnDate && (isPastDate(p.returnDate, now) || p.returnDate < p.date)) return "bad_return";
   return null;
 }
@@ -90,18 +93,23 @@ function FlightCard({
   params,
   tag,
   saved,
+  hard,
+  extra,
 }: {
   flight: LiveFlight;
   params: SearchParams;
   tag: string;
   saved?: number | null;
+  hard?: boolean;
+  extra?: string;
 }) {
   const names = flight.airlines.map((a) => a.name).join(" + ");
+  const destLabel = isAnywhere(params.dest) ? flight.ticketedDest : params.dest;
   return (
-    <article className={`card ${flight.stopCount ? "detour" : "simple"}`}>
+    <article className={`card ${hard ? "hidden_city" : flight.stopCount ? "detour" : "simple"}`}>
       <div className="card-top">
         <div>
-          <span className={`badge ${flight.stopCount ? "save" : ""}`}>{tag}</span>
+          <span className={`badge ${hard ? "hard" : saved ? "save" : flight.stopCount ? "save" : ""}`}>{tag}</span>
           <div className="logos">
             {flight.airlines.map((a) => (
               <img
@@ -121,7 +129,7 @@ function FlightCard({
             <div>
               <b>{flight.outbound.depart}</b>
               <small>
-                sale {params.origin} → {params.dest}
+                sale {flight.outbound.from} → {destLabel}
               </small>
             </div>
             <div>
@@ -136,9 +144,7 @@ function FlightCard({
             <div className="times inbound">
               <div>
                 <b>{flight.inbound.depart}</b>
-                <small>
-                  vuelta {params.dest} → {params.origin}
-                </small>
+                <small>vuelta</small>
               </div>
               <div>
                 <b>{flight.inbound.arrive}</b>
@@ -149,14 +155,17 @@ function FlightCard({
         </div>
         <div className="price">
           {euro(flight.priceEur)}
-          <span>{saved && saved > 0 ? `ahorras ${euro(saved)} vs la semana de referencia` : "precio real · Kiwi.com"}</span>
+          <span>
+            {saved && saved > 0 ? `ahorras ${euro(saved)} vs el precio normal` : "precio real · Kiwi.com"}
+          </span>
         </div>
       </div>
       <p className="explain">
-        {flight.stopCount
-          ? `Con escala (${minutesLabel(flight.layoverMinutes)} de espera). Precio vivo de Kiwi, no un ejemplo.`
-          : "Directo. Precio vivo de Kiwi, no un ejemplo."}
-        {flight.selfTransfer ? " Puede ser auto-transferencia (más de una aerolínea)." : ""}
+        {extra ??
+          (flight.stopCount
+            ? `Con escala (${minutesLabel(flight.layoverMinutes)} de espera). Precio vivo de Kiwi.`
+            : "Directo. Precio vivo de Kiwi.")}
+        {flight.selfTransfer && !hard ? " Puede ser auto-transferencia (más de una aerolínea)." : ""}
       </p>
       <div className="book-row">
         <a className="book primary" href={flight.bookingUrl} target="_blank" rel="noopener noreferrer">
@@ -164,13 +173,25 @@ function FlightCard({
         </a>
         <a
           className="book google"
-          href={googleFlightsUrl({ ...params, airlineName: flight.airlines[0]?.name })}
+          href={googleFlightsUrl({
+            ...params,
+            dest: isAnywhere(params.dest) ? flight.ticketedDest : params.dest,
+            airlineName: flight.airlines[0]?.name,
+          })}
           target="_blank"
           rel="noopener noreferrer"
         >
           Comprobar en Google Flights
         </a>
-        <a className="book sky" href={skyscannerUrl(params)} target="_blank" rel="noopener noreferrer">
+        <a
+          className="book sky"
+          href={skyscannerUrl({
+            ...params,
+            dest: isAnywhere(params.dest) ? flight.ticketedDest : params.dest,
+          })}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           Comprobar en Skyscanner
         </a>
       </div>
@@ -196,10 +217,12 @@ export function SearchBoard() {
   const [params, setParams] = useState<SearchParams | null>(null);
   const [raw, setRaw] = useState<LiveFlight[]>([]);
   const [rawRef, setRawRef] = useState<LiveFlight[]>([]);
+  const [hints, setHints] = useState<{ date: string; days: number; price: number; savedEur: number }[]>([]);
   const [refMeta, setRefMeta] = useState<{ date: string; label: string } | null>(null);
   const req = useRef(0);
 
   const destName = useMemo(() => {
+    if (isAnywhere(dest)) return "cualquier destino";
     const a = getAirport(dest);
     return a ? labelAirport(a) : dest;
   }, [dest]);
@@ -229,6 +252,10 @@ export function SearchBoard() {
     () => filterFlights(rawRef, maxLayoverHours, airline),
     [rawRef, maxLayoverHours, airline],
   );
+  const ranked = useMemo(
+    () => rankFlights(flights, refFlights, params?.dest ?? dest, bags),
+    [flights, refFlights, params?.dest, dest, bags],
+  );
   const cheapest = flights[0] ?? null;
   const cheapestDirect = flights.find((f) => f.stopCount === 0) ?? null;
   const cheapestStop = flights.find((f) => f.stopCount > 0) ?? null;
@@ -236,7 +263,6 @@ export function SearchBoard() {
     cheapestDirect && cheapestStop && cheapestStop.priceEur < cheapestDirect.priceEur
       ? cheapestDirect.priceEur - cheapestStop.priceEur
       : 0;
-  const cmp = errorCompare(cheapest?.priceEur ?? null, refFlights[0]?.priceEur ?? null);
 
   async function run(next = current) {
     setError(null);
@@ -246,6 +272,7 @@ export function SearchBoard() {
     if (reason) {
       setRaw([]);
       setRawRef([]);
+      setHints([]);
       return;
     }
     const id = ++req.current;
@@ -253,22 +280,42 @@ export function SearchBoard() {
     const ref = referenceDate(next.date);
     setRefMeta(ref);
     try {
-      const [nowList, weekList] = await Promise.all([
+      const [nowList, weekList, altLists] = await Promise.all([
         fetchKiwiFlights(next),
         fetchKiwiFlights({
           ...next,
           date: ref.date,
           returnDate: next.returnDate ? shiftReturn(next.date, next.returnDate, ref.date) : null,
         }).catch(() => [] as LiveFlight[]),
+        Promise.all(
+          altOffsetsFor(next.dest).map(async (days) => {
+            const date = addDays(next.date, days);
+            if (isPastDate(date)) return { date, days, cheapest: null as number | null };
+            try {
+              const list = await fetchKiwiFlights({
+                ...next,
+                date,
+                returnDate: next.returnDate ? shiftReturn(next.date, next.returnDate, date) : null,
+                limit: 6,
+              });
+              return { date, days, cheapest: list[0]?.priceEur ?? null };
+            } catch {
+              return { date, days, cheapest: null as number | null };
+            }
+          }),
+        ),
       ]);
       if (id !== req.current) return;
       setRaw(nowList);
       setRawRef(weekList);
+      const refPrice = weekList[0]?.priceEur ?? null;
+      setHints(dateHints(altLists, refPrice));
       setTab("flights");
     } catch (e) {
       if (id !== req.current) return;
       setRaw([]);
       setRawRef([]);
+      setHints([]);
       setError(e instanceof Error ? e.message : "No se pudo leer Kiwi ahora mismo.");
     } finally {
       if (id === req.current) setLoading(false);
@@ -284,7 +331,7 @@ export function SearchBoard() {
     <>
       <form className="search world" onSubmit={onSubmit}>
         <AirportField label="Origen" value={origin} onChange={setOrigin} />
-        <AirportField label="Destino" value={dest} onChange={setDest} />
+        <AirportField label="Destino" value={dest} onChange={setDest} allowAnywhere />
         <label>
           Tipo
           <select
@@ -378,63 +425,149 @@ export function SearchBoard() {
             </button>
             <button type="button" className={tab === "error" ? "on" : ""} onClick={() => setTab("error")}>
               Tarifa error
-              {cmp.looksLikeError ? " · hay una" : ""}
+              {ranked.error.length ? ` · ${ranked.error.length}` : ""}
             </button>
           </div>
 
-          {loading && <p className="banner">Leyendo precios en tiempo real…</p>}
+          {loading && <p className="banner">Buscando primero las tarifas raras, luego el resto…</p>}
+
+          {!loading && ranked.error.length === 0 && (
+            <p className="banner">
+              No hay tarifas error para esta fecha
+              {refFlights[0] && cheapest ? ` (ahora ${euro(cheapest.priceEur)} · normal ${euro(refFlights[0].priceEur)})` : ""}.
+              {hints.length > 0 ? " Sí las hay en otras fechas:" : ""}
+              {hints.map((h) => (
+                <button
+                  key={h.date}
+                  type="button"
+                  className="date-chip"
+                  onClick={() => {
+                    setDate(h.date);
+                    if (params?.returnDate) setReturnDate(shiftReturn(params.date, params.returnDate, h.date));
+                    void run({
+                      ...current,
+                      date: h.date,
+                      returnDate: current.returnDate
+                        ? shiftReturn(current.date, current.returnDate, h.date)
+                        : null,
+                    });
+                  }}
+                >
+                  dentro de {h.days} días · {h.date} · {euro(h.price)}
+                </button>
+              ))}
+            </p>
+          )}
 
           {tab === "flights" && !loading && (
             <>
-              {stopSaves > 0 ? (
-                <p className="banner save">
-                  Sí ahorras frente al directo: {euro(stopSaves)} con escala hacia {destName}.
-                </p>
-              ) : cheapestDirect ? (
-                <p className="banner">
-                  En {originName} → {destName} el directo es la opción más barata dentro de {maxLayoverHours} h
-                  de espera.
-                </p>
-              ) : null}
-              {flights.length === 0 ? (
-                <p className="empty">Kiwi no devolvió vuelos para esos filtros. Prueba otra fecha o abre Google Flights.</p>
-              ) : (
-                flights.slice(0, 8).map((f, i) => (
-                  <FlightCard
-                    key={f.id}
-                    flight={f}
-                    params={params}
-                    tag={i === 0 ? "más barato ahora" : f.stopCount ? "con escala" : "directo"}
-                    saved={i === 0 ? cmp.savedEur : null}
-                  />
-                ))
+              {ranked.error.length > 0 && (
+                <section className="block">
+                  <h2>1. Tarifas error</h2>
+                  <p className="ref">Los descuentos más bestias vs el precio normal de la semana de referencia. Van primero.</p>
+                  {ranked.error.map((hit) => (
+                    <FlightCard
+                      key={hit.flight.id}
+                      flight={hit.flight}
+                      params={params}
+                      tag={`tarifa error · −${hit.savePct}%`}
+                      saved={hit.savedEur}
+                      extra={`Mismo destino ${hit.flight.ticketedDest}: ahora ${euro(hit.flight.priceEur)} frente a ${euro(hit.refPrice)} de un vuelo normal.`}
+                    />
+                  ))}
+                </section>
               )}
+
+              {ranked.hidden.length > 0 && (
+                <section className="block hidden-wrap">
+                  <h2>2. Más barato bajándote en la escala</h2>
+                  <p className="ref">
+                    Billete hasta más lejos; te bajas en la escala y no vuelas el último tramo. La aerolínea lo
+                    prohíbe. Sin maleta facturada.
+                  </p>
+                  {ranked.hidden.map((hit) => (
+                    <FlightCard
+                      key={hit.flight.id}
+                      flight={hit.flight}
+                      params={params}
+                      tag="ciudad oculta"
+                      saved={hit.savedEur}
+                      hard
+                      extra={`Te bajas en ${hit.getOff} y no vuelas hasta ${hit.ticketed}. Sale ${euro(hit.savedEur)} más barato que un billete solo hasta ${hit.getOff}.`}
+                    />
+                  ))}
+                </section>
+              )}
+
+              <section className="block">
+                <h2>{ranked.error.length || ranked.hidden.length ? "3. El resto de vuelos" : "Vuelos"}</h2>
+                {stopSaves > 0 ? (
+                  <p className="banner save">
+                    Hay escala más barata que el directo: {euro(stopSaves)} hacia {destName}.
+                  </p>
+                ) : cheapestDirect ? (
+                  <p className="banner">
+                    En {originName} → {destName} el directo gana dentro de {maxLayoverHours} h de espera.
+                  </p>
+                ) : null}
+                {ranked.normal.length === 0 && ranked.error.length === 0 && ranked.hidden.length === 0 ? (
+                  <p className="empty">Kiwi no devolvió vuelos para esos filtros. Prueba otra fecha o abre Google Flights.</p>
+                ) : (
+                  ranked.normal.slice(0, 8).map((f) => (
+                    <FlightCard
+                      key={f.id}
+                      flight={f}
+                      params={params}
+                      tag={f.stopCount ? "con escala" : "directo"}
+                    />
+                  ))
+                )}
+              </section>
             </>
           )}
 
           {tab === "error" && !loading && (
             <>
-              {cmp.looksLikeError && cheapest ? (
+              {ranked.error.length > 0 ? (
                 <p className="banner error-now">
-                  Esta fecha sale {euro(cheapest.priceEur)} frente a {euro(refFlights[0]?.priceEur ?? 0)} {refMeta?.label}.
-                  Ahorras {euro(cmp.savedEur ?? 0)} respecto a ese vuelo “normal” de la semana de referencia.
+                  Hay {ranked.error.length} tarifa{ranked.error.length === 1 ? "" : "s"} error hoy. Van primero en
+                  Vuelos, ordenadas por el descuento más bestia.
                 </p>
               ) : (
                 <p className="banner">
-                  No parece una tarifa error: no hay un descuento fuerte (25 % y ≥ 25 €) frente a {refMeta?.label ?? "la semana de referencia"}.
-                  {cheapest && refFlights[0]
-                    ? ` Ahora ${euro(cheapest.priceEur)} · referencia ${euro(refFlights[0].priceEur)}.`
-                    : ""}
+                  No hay tarifas error para esta fecha.
+                  {hints.length > 0 ? " Revisa estas otras:" : " Tampoco aparecen en +2 a +15 días con el mismo criterio."}
                 </p>
               )}
-              {cheapest && (
+              {hints.map((h) => (
+                <button
+                  key={h.date}
+                  type="button"
+                  className="date-chip"
+                  onClick={() => {
+                    setDate(h.date);
+                    void run({
+                      ...current,
+                      date: h.date,
+                      returnDate: current.returnDate
+                        ? shiftReturn(current.date, current.returnDate, h.date)
+                        : null,
+                    });
+                  }}
+                >
+                  dentro de {h.days} días · {h.date} · {euro(h.price)} · ahorras {euro(h.savedEur)}
+                </button>
+              ))}
+              {ranked.error.map((hit) => (
                 <FlightCard
-                  flight={cheapest}
+                  key={hit.flight.id}
+                  flight={hit.flight}
                   params={params}
-                  tag={cmp.looksLikeError ? "posible tarifa error" : "más barato de esta fecha"}
-                  saved={cmp.savedEur}
+                  tag={`tarifa error · −${hit.savePct}%`}
+                  saved={hit.savedEur}
+                  extra={`Vs ${euro(hit.refPrice)} ${refMeta?.label ?? "de referencia"}.`}
                 />
-              )}
+              ))}
               {refFlights[0] && refMeta && (
                 <FlightCard
                   flight={refFlights[0]}
@@ -449,32 +582,14 @@ export function SearchBoard() {
                 />
               )}
               <p className="ref">
-                Comparación hecha con precios reales de Kiwi, misma ruta y mismos pasajeros. Ábrelo en Google
-                Flights para ver el gráfico de precios de Google.
+                Comparación con precios reales de Kiwi. Destino “cualquier sitio”: cada ciudad se compara con lo
+                que costaba esa misma ciudad la semana de referencia.
               </p>
               <SourceLinks p={params} />
-              {refMeta && (
-                <SourceLinks
-                  p={{
-                    ...params,
-                    date: refMeta.date,
-                    returnDate: params.returnDate
-                      ? shiftReturn(params.date, params.returnDate, refMeta.date)
-                      : null,
-                  }}
-                />
-              )}
             </>
           )}
         </div>
       )}
     </>
   );
-}
-
-function shiftReturn(oldOut: string, oldRet: string, newOut: string): string {
-  const [y1, m1, d1] = oldOut.split("-").map(Number);
-  const [y2, m2, d2] = oldRet.split("-").map(Number);
-  const days = Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000);
-  return addDays(newOut, days);
 }

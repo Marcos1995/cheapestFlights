@@ -20,5 +20,6 @@
 
 ## Notas para el agente
 - No mostrar precios inventados. Si Kiwi falla, dejar los enlaces oficiales.
-- Pestaña tarifa error = comparar con la misma ruta 7 días antes (o después si esa fecha ya pasó)
+- Destino ANY = Kiwi `anywhere`; orden: tarifa error → ciudad oculta → resto
+- Si no hay error hoy, pistas de fechas +2/+3/+5/+7/+10/+15
 - gstack only (ver AGENTS.md)

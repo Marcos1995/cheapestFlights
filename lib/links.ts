@@ -1,5 +1,5 @@
 import type { Cabin } from "./types";
-import { skyDate } from "./types";
+import { isAnywhere, skyDate } from "./types";
 
 const CABIN_ES: Record<Cabin, string> = {
   ECONOMY: "turista",
@@ -28,7 +28,10 @@ export function googleFlightsUrl(p: {
   const trip = p.returnDate
     ? `ida ${p.date} vuelta ${p.returnDate}`
     : `el ${p.date} solo ida`;
-  let q = `Vuelos de ${p.origin} a ${p.dest} ${trip}, ${people}, clase ${CABIN_ES[p.cabin]}`;
+  const anywhere = isAnywhere(p.dest);
+  let q = anywhere
+    ? `Vuelos desde ${p.origin} ${trip}, ${people}, clase ${CABIN_ES[p.cabin]}`
+    : `Vuelos de ${p.origin} a ${p.dest} ${trip}, ${people}, clase ${CABIN_ES[p.cabin]}`;
   if (p.airlineName) q += `, aerolínea ${p.airlineName}`;
   return `https://www.google.com/travel/flights?hl=es&gl=ES&curr=EUR&q=${encodeURIComponent(q)}`;
 }
@@ -42,10 +45,14 @@ export function skyscannerUrl(p: {
   cabin: Cabin;
 }): string {
   const o = p.origin.toLowerCase();
-  const d = p.dest.toLowerCase();
   const out = skyDate(p.date);
   const ret = p.returnDate ? `${skyDate(p.returnDate)}/` : "";
   const rtn = p.returnDate ? "1" : "0";
+  const anywhere = isAnywhere(p.dest);
+  if (anywhere) {
+    return `https://www.skyscanner.es/transporte/vuelos-desde/${o}/${out}/${ret}?adultsv2=${p.adults}&cabinclass=${CABIN_SKY[p.cabin]}&rtn=${rtn}`;
+  }
+  const d = p.dest.toLowerCase();
   return `https://www.skyscanner.es/transporte/vuelos/${o}/${d}/${out}/${ret}?adultsv2=${p.adults}&cabinclass=${CABIN_SKY[p.cabin]}&rtn=${rtn}`;
 }
 
@@ -57,7 +64,8 @@ export function kiwiSearchUrl(p: {
   adults: number;
 }): string {
   const ret = p.returnDate ?? "no-return";
-  return `https://www.kiwi.com/es/search/results/${p.origin.toLowerCase()}/${p.dest.toLowerCase()}/${p.date}/${ret}?adults=${p.adults}`;
+  const d = isAnywhere(p.dest) ? "anywhere" : p.dest.toLowerCase();
+  return `https://www.kiwi.com/es/search/results/${p.origin.toLowerCase()}/${d}/${p.date}/${ret}?adults=${p.adults}`;
 }
 
 export function kiwiBookingUrl(path: string): string {

@@ -537,10 +537,13 @@ a {
   color: #007a68;
 }
 
-.times.inbound {
-  margin-top: 0;
-  padding-top: 8px;
-  border-top: 1px dashed var(--line);
+.block h2 {
+  margin: 8px 0 4px;
+  font-size: 22px;
+}
+
+.block .ref {
+  margin-bottom: 12px;
 }
 
 @media (max-width: 800px) {
