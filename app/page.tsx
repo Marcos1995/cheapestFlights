@@ -12,14 +12,14 @@ export default function HomePage() {
           </div>
         </div>
         <p>
-          Busca origen y destino concretos, o cualquiera de los dos (o los dos). Un día, un mes
-          Lo primero: una tarifa error de verdad (mitad de precio o menos) o, si no, un gran descuento.
+          No es Skyscanner. Busca un desvío: escala más barata que el directo (y sí la vuelas), ciudad
+          oculta, o tarifa error. Si no hay nada de eso, te lo decimos y te mandamos a Google Flights.
         </p>
         <div className="stamp">precios reales</div>
       </header>
       <SearchBoard />
       <p className="demo-note">
-        Precios en vivo vía Kiwi.com. Google Flights y Skyscanner se abren con la misma búsqueda. Maqueta
+        Precios en vivo vía Kiwi.com. Si no hay desvío, se cede a Google Flights y Skyscanner. Maqueta
         estática: <Link href="/demo/tarifa-error">/demo/tarifa-error</Link>.
       </p>
     </main>

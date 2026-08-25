@@ -306,11 +306,12 @@ export function SearchBoard() {
   );
   const cheapest = flights[0] ?? null;
   const cheapestDirect = flights.find((f) => f.stopCount === 0) ?? null;
-  const cheapestStop = flights.find((f) => f.stopCount > 0) ?? null;
-  const stopSaves =
-    cheapestDirect && cheapestStop && cheapestStop.priceEur < cheapestDirect.priceEur
-      ? cheapestDirect.priceEur - cheapestStop.priceEur
-      : 0;
+  const hasHack = ranked.error.length + ranked.detour.length + ranked.hidden.length > 0;
+  const hackIds = new Set([
+    ...ranked.error.map((h) => h.flight.id),
+    ...ranked.detour.map((h) => h.flight.id),
+    ...ranked.hidden.map((h) => h.flight.id),
+  ]);
 
   async function run(next = current) {
     setError(null);
@@ -537,8 +538,8 @@ export function SearchBoard() {
         </button>
       </form>
       <p className="ref">
-        Precios reales de Kiwi.com. Cada tarjeta abre la reserva o el mismo trayecto en Google Flights y
-        Skyscanner. Los kilos exactos se eligen en el checkout.
+        Precios reales de Kiwi.com. No es un listado tipo Skyscanner: si no hay desvío, se indica y se
+        abre Google Flights o Skyscanner. Los kilos exactos se eligen en el checkout.
       </p>
       {error && (
         <p className="error">
@@ -562,9 +563,9 @@ export function SearchBoard() {
             </button>
           </div>
 
-          {loading && <p className="banner">Buscando primero las tarifas raras, luego el resto…</p>}
+          {loading && <p className="banner">Buscando un desvío más barato que el directo…</p>}
 
-          {!loading && ranked.error.length === 0 && ranked.discount.length === 0 && (
+          {!loading && tab === "error" && ranked.error.length === 0 && ranked.discount.length === 0 && (
             <p className="banner">
               No hay una caída fuerte vs la semana de referencia
               {params && isFlexible(params.date, params.dateTo) ? " en esta ventana" : " para esta fecha"}
@@ -598,100 +599,99 @@ export function SearchBoard() {
 
           {tab === "flights" && !loading && (
             <>
-              {ranked.error.length > 0 && (
+              {flights.length === 0 ? (
+                <p className="empty">Kiwi no devolvió vuelos para esos filtros. Prueba otra fecha o abre Google Flights.</p>
+              ) : !hasHack ? (
                 <section className="block">
-                  <h2>1. Tarifas error</h2>
-                  <p className="ref">
-                    Mitad de precio o menos, y al menos 80 € menos que el mismo trayecto hace una semana. No
-                    es un 25 % de oferta: es una caída brutal.
-                  </p>
-                  {ranked.error.map((hit) => (
-                    <FlightCard
-                      key={hit.flight.id}
-                      flight={hit.flight}
-                      params={params}
-                      tag={`tarifa error · −${hit.savePct}%`}
-                      saved={hit.savedEur}
-                      extra={`Ahora ${euro(hit.flight.priceEur)} frente a ${euro(hit.refPrice)} la semana de referencia.`}
-                    />
-                  ))}
-                </section>
-              )}
-
-              {ranked.hidden.length > 0 && (
-                <section className="block hidden-wrap">
-                  <h2>{ranked.error.length ? "2. " : "1. "}Más barato bajándote en la escala</h2>
-                  <p className="ref">
-                    Billete hasta más lejos; te bajas en la escala y no vuelas el último tramo. La aerolínea lo
-                    prohíbe. Sin maleta facturada.
-                  </p>
-                  {ranked.hidden.map((hit) => (
-                    <FlightCard
-                      key={hit.flight.id}
-                      flight={hit.flight}
-                      params={params}
-                      tag="ciudad oculta"
-                      saved={hit.savedEur}
-                      hard
-                      extra={`Te bajas en ${hit.getOff} y no vuelas hasta ${hit.ticketed}. Sale ${euro(hit.savedEur)} más barato que un billete solo hasta ${hit.getOff}.`}
-                    />
-                  ))}
-                </section>
-              )}
-
-              {ranked.discount.length > 0 && (
-                <section className="block">
-                  <h2>
-                    {(ranked.error.length ? 1 : 0) + (ranked.hidden.length ? 1 : 0) + 1}. Gran descuento
-                  </h2>
-                  <p className="ref">
-                    Al menos 25 % y 25 € menos que hace una semana. Es una oferta fuerte, no un error de
-                    tarifa.
-                  </p>
-                  {ranked.discount.map((hit) => (
-                    <FlightCard
-                      key={hit.flight.id}
-                      flight={hit.flight}
-                      params={params}
-                      tag={`gran descuento · −${hit.savePct}%`}
-                      saved={hit.savedEur}
-                      extra={`Ahora ${euro(hit.flight.priceEur)} frente a ${euro(hit.refPrice)} hace una semana.`}
-                    />
-                  ))}
-                </section>
-              )}
-
-              <section className="block">
-                <h2>
-                  {ranked.error.length || ranked.hidden.length || ranked.discount.length
-                    ? `${(ranked.error.length ? 1 : 0) + (ranked.hidden.length ? 1 : 0) + (ranked.discount.length ? 1 : 0) + 1}. El resto de vuelos`
-                    : "Vuelos"}
-                </h2>
-                {stopSaves > 0 ? (
-                  <p className="banner save">
-                    Hay escala más barata que el directo: {euro(stopSaves)} hacia {destName}.
-                  </p>
-                ) : cheapestDirect ? (
                   <p className="banner">
-                    En {originName} → {destName} el directo gana dentro de {maxLayoverHours} h de espera.
+                    Hoy no hay desvío en {originName} → {destName}: ni escala más barata que el directo, ni
+                    ciudad oculta, ni tarifa error. Esto es lo mismo que verías en Google Flights o Skyscanner.
                   </p>
-                ) : null}
-                {ranked.normal.length === 0 &&
-                ranked.error.length === 0 &&
-                ranked.discount.length === 0 &&
-                ranked.hidden.length === 0 ? (
-                  <p className="empty">Kiwi no devolvió vuelos para esos filtros. Prueba otra fecha o abre Google Flights.</p>
-                ) : (
-                  ranked.normal.slice(0, 8).map((f) => (
+                  {cheapest && (
                     <FlightCard
-                      key={f.id}
-                      flight={f}
+                      flight={cheapest}
                       params={params}
-                      tag={f.stopCount ? "con escala" : "directo"}
+                      tag={cheapest.stopCount ? "precio normal · con escala" : "precio normal · directo"}
+                      extra="No es un desvío. Ábrelo en Google Flights o Skyscanner si quieres el listado completo."
                     />
-                  ))
-                )}
-              </section>
+                  )}
+                  <SourceLinks p={params} />
+                </section>
+              ) : (
+                <>
+                  {ranked.error.length > 0 && (
+                    <section className="block">
+                      <h2>Tarifa error</h2>
+                      <p className="ref">
+                        Mitad de precio o menos, y al menos 80 € menos que hace una semana.
+                      </p>
+                      {ranked.error.map((hit) => (
+                        <FlightCard
+                          key={hit.flight.id}
+                          flight={hit.flight}
+                          params={params}
+                          tag={`tarifa error · −${hit.savePct}%`}
+                          saved={hit.savedEur}
+                          extra={`Ahora ${euro(hit.flight.priceEur)} frente a ${euro(hit.refPrice)} la semana de referencia.`}
+                        />
+                      ))}
+                    </section>
+                  )}
+
+                  {ranked.detour.length > 0 && (
+                    <section className="block">
+                      <h2>Desvío: más barato con escala</h2>
+                      <p className="ref">
+                        Vuelas todos los tramos. Sale al menos 25 € menos que el directo al mismo destino. Eso
+                        es lo que Google Flights suele enterrar.
+                      </p>
+                      {ranked.detour.map((hit) => (
+                        <FlightCard
+                          key={hit.flight.id}
+                          flight={hit.flight}
+                          params={params}
+                          tag={`desvío · ahorras ${euro(hit.savedEur)}`}
+                          saved={hit.savedEur}
+                          extra={`Escala en ${hit.flight.outbound.stops.join(", ") || "conexión"}. ${euro(hit.flight.priceEur)} frente a ${euro(hit.vsDirect)} el directo. Vuelas todos los tramos.${hit.flight.selfTransfer ? " Puede ser auto-transferencia." : ""}`}
+                        />
+                      ))}
+                    </section>
+                  )}
+
+                  {ranked.hidden.length > 0 && (
+                    <section className="block hidden-wrap">
+                      <h2>Ciudad oculta</h2>
+                      <p className="ref">
+                        Billete hasta más lejos; te bajas en la escala y no vuelas el último tramo. La aerolínea
+                        lo prohíbe. Sin maleta facturada.
+                      </p>
+                      {ranked.hidden.map((hit) => (
+                        <FlightCard
+                          key={hit.flight.id}
+                          flight={hit.flight}
+                          params={params}
+                          tag="ciudad oculta"
+                          saved={hit.savedEur}
+                          hard
+                          extra={`Te bajas en ${hit.getOff} y no vuelas hasta ${hit.ticketed}. Sale ${euro(hit.savedEur)} más barato que un billete solo hasta ${hit.getOff}.`}
+                        />
+                      ))}
+                    </section>
+                  )}
+
+                  {cheapestDirect && !hackIds.has(cheapestDirect.id) && (
+                    <section className="block">
+                      <h2>El directo, para comparar</h2>
+                      <FlightCard
+                        flight={cheapestDirect}
+                        params={params}
+                        tag="directo"
+                        extra="El vuelo simple. El desvío de arriba existe porque sale más barato que esto."
+                      />
+                    </section>
+                  )}
+                </>
+              )}
             </>
           )}
 

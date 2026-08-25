@@ -3,8 +3,8 @@
 Web estática: busca **ida o ida y vuelta** entre aeropuertos reales.
 
 1. Precio **vivo** (Kiwi.com) y botón de reserva.
-2. El mismo trayecto en **Google Flights** y **Skyscanner**.
-3. Pestaña **Bajadas**: tarifa error (mitad de precio o menos y ≥80 € vs hace una semana) o gran descuento (≥25 % y ≥25 €).
+2. El mismo trayecto en **Google Flights** y **Skyscanner** si no hay desvío.
+3. Resultados: desvío legal (escala más barata que el directo), ciudad oculta, tarifa error. Si no hay, se cede.
 
 Pública: https://marcos1995.github.io/cheapestFlights/
 
@@ -22,6 +22,7 @@ GitHub Pages usa `GITHUB_PAGES=true npm run build` (base `/cheapestFlights`).
 
 ## Docs
 
+- `docs/designs/desvio-not-a-comparator.md`
 - `docs/designs/desvio-freeze-measure-demand.md`
 - `PROJECT.md`
 - `AGENTS.md`

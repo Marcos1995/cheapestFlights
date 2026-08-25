@@ -23,6 +23,12 @@ export type HiddenHit = {
   savedEur: number;
 };
 
+export type DetourHit = {
+  flight: LiveFlight;
+  savedEur: number;
+  vsDirect: number;
+};
+
 export type DateHint = {
   date: string;
   days: number;
@@ -43,6 +49,31 @@ export function cheapestByRoute(flights: LiveFlight[]): Map<string, number> {
     if (prev == null || f.priceEur < prev) map.set(key, f.priceEur);
   }
   return map;
+}
+
+export function cheapestDirectByRoute(flights: LiveFlight[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const f of flights) {
+    if (f.stopCount !== 0) continue;
+    const key = routeKey(f);
+    const prev = map.get(key);
+    if (prev == null || f.priceEur < prev) map.set(key, f.priceEur);
+  }
+  return map;
+}
+
+export function legalDetourOf(
+  flight: LiveFlight,
+  requestedDest: string,
+  directs: Map<string, number>,
+): DetourHit | null {
+  if (flight.stopCount === 0) return null;
+  if (!isAnywhere(requestedDest) && flight.ticketedDest !== requestedDest) return null;
+  const vsDirect = directs.get(routeKey(flight));
+  if (vsDirect == null) return null;
+  const savedEur = vsDirect - flight.priceEur;
+  if (savedEur < 25) return null;
+  return { flight, savedEur, vsDirect };
 }
 
 export function hiddenCityOf(
@@ -90,13 +121,16 @@ export function rankFlights(
   ref: LiveFlight[],
   requestedDest: string,
   bags: number,
-): { error: DealHit[]; discount: DealHit[]; hidden: HiddenHit[]; normal: LiveFlight[] } {
+): { error: DealHit[]; detour: DetourHit[]; discount: DealHit[]; hidden: HiddenHit[]; normal: LiveFlight[] } {
   const cheapestNow = cheapestByRoute(now);
   const cheapestRef = cheapestByRoute(ref);
+  const directs = cheapestDirectByRoute(now);
   const error: DealHit[] = [];
+  const detour: DetourHit[] = [];
   const discount: DealHit[] = [];
   const hidden: HiddenHit[] = [];
   const errorIds = new Set<string>();
+  const detourIds = new Set<string>();
   const discountIds = new Set<string>();
   const hiddenIds = new Set<string>();
 
@@ -111,6 +145,16 @@ export function rankFlights(
 
   for (const flight of now) {
     if (errorIds.has(flight.id)) continue;
+    const det = legalDetourOf(flight, requestedDest, directs);
+    if (det) {
+      detour.push(det);
+      detourIds.add(flight.id);
+    }
+  }
+  detour.sort((a, b) => b.savedEur - a.savedEur);
+
+  for (const flight of now) {
+    if (errorIds.has(flight.id) || detourIds.has(flight.id)) continue;
     const hid = hiddenCityOf(flight, requestedDest, bags, cheapestNow);
     if (hid) {
       hidden.push(hid);
@@ -120,7 +164,7 @@ export function rankFlights(
   hidden.sort((a, b) => b.savedEur - a.savedEur);
 
   for (const flight of now) {
-    if (errorIds.has(flight.id) || hiddenIds.has(flight.id)) continue;
+    if (errorIds.has(flight.id) || detourIds.has(flight.id) || hiddenIds.has(flight.id)) continue;
     const sale = dealHitOf(flight, cheapestRef, "discount");
     if (sale) {
       discount.push(sale);
@@ -129,10 +173,9 @@ export function rankFlights(
   }
   discount.sort((a, b) => b.savePct - a.savePct || b.savedEur - a.savedEur);
 
-  const normal = now.filter(
-    (f) => !errorIds.has(f.id) && !hiddenIds.has(f.id) && !discountIds.has(f.id),
-  );
-  return { error, discount, hidden, normal };
+  const taken = new Set([...errorIds, ...detourIds, ...hiddenIds, ...discountIds]);
+  const normal = now.filter((f) => !taken.has(f.id));
+  return { error, detour, discount, hidden, normal };
 }
 
 export function altOffsetsFor(origin: string, dest: string, flexible = false): readonly number[] {

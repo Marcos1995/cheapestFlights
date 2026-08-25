@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { altOffsetsFor, dateHints, hiddenCityOf, rankFlights } from "./rank";
+import { altOffsetsFor, dateHints, hiddenCityOf, legalDetourOf, rankFlights } from "./rank";
 import type { LiveFlight } from "./types";
 
 function flight(partial: Partial<LiveFlight> & Pick<LiveFlight, "id" | "priceEur" | "ticketedDest">): LiveFlight {
@@ -34,12 +34,32 @@ function flight(partial: Partial<LiveFlight> & Pick<LiveFlight, "id" | "priceEur
 test("error fares rank ahead of hidden city; weekly sales are discounts, not errors", () => {
   const now = [
     flight({ id: "direct", priceEur: 200, ticketedDest: "FCO" }),
-    flight({ id: "sale", priceEur: 140, ticketedDest: "FCO" }),
+    flight({ id: "sale", priceEur: 140, ticketedDest: "AMS" }),
     flight({ id: "error", priceEur: 80, ticketedDest: "MAD" }),
+    flight({
+      id: "detour",
+      priceEur: 150,
+      ticketedDest: "FCO",
+      stopCount: 1,
+      outbound: {
+        from: "BCN",
+        to: "FCO",
+        fromName: "Barcelona",
+        toName: "Rome",
+        depart: "08:00",
+        arrive: "14:00",
+        durationMin: 360,
+        stops: ["CDG"],
+        layoverMinutes: 80,
+        airlines: [{ code: "VY", name: "Vueling" }],
+        date: "2026-09-15",
+      },
+    }),
     flight({
       id: "hidden",
       priceEur: 90,
       ticketedDest: "RGS",
+      stopCount: 1,
       outbound: {
         from: "BCN",
         to: "RGS",
@@ -57,12 +77,15 @@ test("error fares rank ahead of hidden city; weekly sales are discounts, not err
   ];
   const ref = [
     flight({ id: "ref-fco", priceEur: 200, ticketedDest: "FCO" }),
+    flight({ id: "ref-ams", priceEur: 200, ticketedDest: "AMS" }),
     flight({ id: "ref-mad", priceEur: 220, ticketedDest: "MAD" }),
   ];
   const ranked = rankFlights(now, ref, "FCO", 0);
   assert.equal(ranked.error[0]?.flight.id, "error");
   assert.equal(ranked.error[0]?.kind, "error");
   assert.ok((ranked.error[0]?.savePct ?? 0) >= 50);
+  assert.equal(ranked.detour[0]?.flight.id, "detour");
+  assert.equal(ranked.detour[0]?.savedEur, 50);
   assert.equal(ranked.discount[0]?.flight.id, "sale");
   assert.equal(ranked.discount[0]?.kind, "discount");
   assert.equal(ranked.hidden[0]?.flight.id, "hidden");
@@ -158,4 +181,28 @@ test("date hints only keep real error drops", () => {
   assert.equal(hints[1].kind, "error");
   assert.deepEqual(altOffsetsFor("ANY", "FCO"), []);
   assert.deepEqual(altOffsetsFor("BCN", "FCO", true), []);
+});
+
+test("legal detour needs a real save vs the direct to the same city", () => {
+  const stop = flight({
+    id: "d",
+    priceEur: 150,
+    ticketedDest: "FCO",
+    stopCount: 1,
+    outbound: {
+      from: "BCN",
+      to: "FCO",
+      fromName: "Barcelona",
+      toName: "Rome",
+      depart: "08:00",
+      arrive: "14:00",
+      durationMin: 360,
+      stops: ["CDG"],
+      layoverMinutes: 80,
+      airlines: [{ code: "VY", name: "Vueling" }],
+      date: "2026-09-15",
+    },
+  });
+  assert.equal(legalDetourOf(stop, "FCO", new Map([["BCN-FCO", 200]]))?.savedEur, 50);
+  assert.equal(legalDetourOf(stop, "FCO", new Map([["BCN-FCO", 160]])), null);
 });
