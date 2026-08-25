@@ -13,7 +13,7 @@ export default function HomePage() {
         </div>
         <p>
           Busca origen y destino concretos, o cualquiera de los dos (o los dos). Un día, un mes
-          entero o fechas flexibles desde–hasta. Lo primero: tarifas error y descuentos brutales.
+          Lo primero: una tarifa error de verdad (mitad de precio o menos) o, si no, un gran descuento.
         </p>
         <div className="stamp">precios reales</div>
       </header>

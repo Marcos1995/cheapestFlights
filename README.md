@@ -4,7 +4,7 @@ Web estática: busca **ida o ida y vuelta** entre aeropuertos reales.
 
 1. Precio **vivo** (Kiwi.com) y botón de reserva.
 2. El mismo trayecto en **Google Flights** y **Skyscanner**.
-3. Pestaña **tarifa error**: compara con la misma ruta una semana antes.
+3. Pestaña **Bajadas**: tarifa error (mitad de precio o menos y ≥80 € vs hace una semana) o gran descuento (≥25 % y ≥25 €).
 
 Pública: https://marcos1995.github.io/cheapestFlights/
 

@@ -21,7 +21,7 @@
 ## Notas para el agente
 - No mostrar precios inventados. Si Kiwi falla, dejar los enlaces oficiales.
 - Origen/destino ANY = Kiwi `anywhere` en cualquiera de los dos
-- Orden: tarifa error → ciudad oculta → resto
+- Orden: tarifa error (≤50 % y ≥80 € vs hace 7 días) → ciudad oculta → gran descuento (≥25 % y ≥25 €) → resto
 - Fechas: un día, rango desde–hasta, o un mes entero
 - Si no hay error hoy (día concreto), pistas de fechas +2/+3/+5/+7/+10/+15
 - gstack only (ver AGENTS.md)

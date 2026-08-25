@@ -110,13 +110,17 @@ export function referenceDate(outbound: string, now = new Date()): { date: strin
 export function errorCompare(nowPrice: number | null, refPrice: number | null): {
   savedEur: number | null;
   looksLikeError: boolean;
+  looksLikeDiscount: boolean;
+  kind: "error" | "discount" | null;
 } {
   if (nowPrice == null || refPrice == null || refPrice <= 0) {
-    return { savedEur: null, looksLikeError: false };
+    return { savedEur: null, looksLikeError: false, looksLikeDiscount: false, kind: null };
   }
   const savedEur = Math.max(0, Math.round(refPrice - nowPrice));
-  const looksLikeError = nowPrice <= refPrice * 0.75 && savedEur >= 25;
-  return { savedEur, looksLikeError };
+  const looksLikeError = nowPrice <= refPrice * 0.5 && savedEur >= 80;
+  const looksLikeDiscount = nowPrice <= refPrice * 0.75 && savedEur >= 25;
+  const kind: "error" | "discount" | null = looksLikeError ? "error" : looksLikeDiscount ? "discount" : null;
+  return { savedEur, looksLikeError, looksLikeDiscount, kind };
 }
 
 export function todayIso(now = new Date()): string {

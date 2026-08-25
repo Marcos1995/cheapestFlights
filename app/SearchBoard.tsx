@@ -261,7 +261,7 @@ export function SearchBoard() {
   const [params, setParams] = useState<SearchParams | null>(null);
   const [raw, setRaw] = useState<LiveFlight[]>([]);
   const [rawRef, setRawRef] = useState<LiveFlight[]>([]);
-  const [hints, setHints] = useState<{ date: string; days: number; price: number; savedEur: number }[]>([]);
+  const [hints, setHints] = useState<{ date: string; days: number; price: number; savedEur: number; kind: "error" | "discount" }[]>([]);
   const [refMeta, setRefMeta] = useState<{ date: string; dateTo: string; label: string } | null>(null);
   const req = useRef(0);
   const months = useMemo(() => upcomingMonths(), []);
@@ -555,17 +555,20 @@ export function SearchBoard() {
               Vuelos
             </button>
             <button type="button" className={tab === "error" ? "on" : ""} onClick={() => setTab("error")}>
-              Tarifa error
-              {ranked.error.length ? ` · ${ranked.error.length}` : ""}
+              Bajadas
+              {ranked.error.length + ranked.discount.length
+                ? ` · ${ranked.error.length + ranked.discount.length}`
+                : ""}
             </button>
           </div>
 
           {loading && <p className="banner">Buscando primero las tarifas raras, luego el resto…</p>}
 
-          {!loading && ranked.error.length === 0 && (
+          {!loading && ranked.error.length === 0 && ranked.discount.length === 0 && (
             <p className="banner">
-              No hay tarifas error {params && isFlexible(params.date, params.dateTo) ? "en esta ventana" : "para esta fecha"}
-              {refFlights[0] && cheapest ? ` (ahora ${euro(cheapest.priceEur)} · normal ${euro(refFlights[0].priceEur)})` : ""}.
+              No hay una caída fuerte vs la semana de referencia
+              {params && isFlexible(params.date, params.dateTo) ? " en esta ventana" : " para esta fecha"}
+              {refFlights[0] && cheapest ? ` (ahora ${euro(cheapest.priceEur)} · hace una semana ${euro(refFlights[0].priceEur)})` : ""}.
               {hints.length > 0 ? " Sí las hay en otras fechas:" : ""}
               {hints.map((h) => (
                 <button
@@ -598,7 +601,10 @@ export function SearchBoard() {
               {ranked.error.length > 0 && (
                 <section className="block">
                   <h2>1. Tarifas error</h2>
-                  <p className="ref">Los descuentos más bestias vs el precio normal de la semana de referencia. Van primero.</p>
+                  <p className="ref">
+                    Mitad de precio o menos, y al menos 80 € menos que el mismo trayecto hace una semana. No
+                    es un 25 % de oferta: es una caída brutal.
+                  </p>
                   {ranked.error.map((hit) => (
                     <FlightCard
                       key={hit.flight.id}
@@ -606,7 +612,7 @@ export function SearchBoard() {
                       params={params}
                       tag={`tarifa error · −${hit.savePct}%`}
                       saved={hit.savedEur}
-                      extra={`Mismo destino ${hit.flight.ticketedDest}: ahora ${euro(hit.flight.priceEur)} frente a ${euro(hit.refPrice)} de un vuelo normal.`}
+                      extra={`Ahora ${euro(hit.flight.priceEur)} frente a ${euro(hit.refPrice)} la semana de referencia.`}
                     />
                   ))}
                 </section>
@@ -614,7 +620,7 @@ export function SearchBoard() {
 
               {ranked.hidden.length > 0 && (
                 <section className="block hidden-wrap">
-                  <h2>2. Más barato bajándote en la escala</h2>
+                  <h2>{ranked.error.length ? "2. " : "1. "}Más barato bajándote en la escala</h2>
                   <p className="ref">
                     Billete hasta más lejos; te bajas en la escala y no vuelas el último tramo. La aerolínea lo
                     prohíbe. Sin maleta facturada.
@@ -633,8 +639,34 @@ export function SearchBoard() {
                 </section>
               )}
 
+              {ranked.discount.length > 0 && (
+                <section className="block">
+                  <h2>
+                    {(ranked.error.length ? 1 : 0) + (ranked.hidden.length ? 1 : 0) + 1}. Gran descuento
+                  </h2>
+                  <p className="ref">
+                    Al menos 25 % y 25 € menos que hace una semana. Es una oferta fuerte, no un error de
+                    tarifa.
+                  </p>
+                  {ranked.discount.map((hit) => (
+                    <FlightCard
+                      key={hit.flight.id}
+                      flight={hit.flight}
+                      params={params}
+                      tag={`gran descuento · −${hit.savePct}%`}
+                      saved={hit.savedEur}
+                      extra={`Ahora ${euro(hit.flight.priceEur)} frente a ${euro(hit.refPrice)} hace una semana.`}
+                    />
+                  ))}
+                </section>
+              )}
+
               <section className="block">
-                <h2>{ranked.error.length || ranked.hidden.length ? "3. El resto de vuelos" : "Vuelos"}</h2>
+                <h2>
+                  {ranked.error.length || ranked.hidden.length || ranked.discount.length
+                    ? `${(ranked.error.length ? 1 : 0) + (ranked.hidden.length ? 1 : 0) + (ranked.discount.length ? 1 : 0) + 1}. El resto de vuelos`
+                    : "Vuelos"}
+                </h2>
                 {stopSaves > 0 ? (
                   <p className="banner save">
                     Hay escala más barata que el directo: {euro(stopSaves)} hacia {destName}.
@@ -644,7 +676,10 @@ export function SearchBoard() {
                     En {originName} → {destName} el directo gana dentro de {maxLayoverHours} h de espera.
                   </p>
                 ) : null}
-                {ranked.normal.length === 0 && ranked.error.length === 0 && ranked.hidden.length === 0 ? (
+                {ranked.normal.length === 0 &&
+                ranked.error.length === 0 &&
+                ranked.discount.length === 0 &&
+                ranked.hidden.length === 0 ? (
                   <p className="empty">Kiwi no devolvió vuelos para esos filtros. Prueba otra fecha o abre Google Flights.</p>
                 ) : (
                   ranked.normal.slice(0, 8).map((f) => (
@@ -664,13 +699,19 @@ export function SearchBoard() {
             <>
               {ranked.error.length > 0 ? (
                 <p className="banner error-now">
-                  Hay {ranked.error.length} tarifa{ranked.error.length === 1 ? "" : "s"} error hoy. Van primero en
-                  Vuelos, ordenadas por el descuento más bestia.
+                  Hay {ranked.error.length} tarifa{ranked.error.length === 1 ? "" : "s"} error: mitad de precio o
+                  menos y al menos 80 € vs la semana de referencia.
+                </p>
+              ) : ranked.discount.length > 0 ? (
+                <p className="banner">
+                  No hay tarifa error. Sí hay gran descuento (≥25 % y ≥25 € vs hace una semana), que no es un
+                  error de la aerolínea.
                 </p>
               ) : (
                 <p className="banner">
-                  No hay tarifas error {params && isFlexible(params.date, params.dateTo) ? "en esta ventana" : "para esta fecha"}.
-                  {hints.length > 0 ? " Revisa estas otras:" : " Tampoco aparecen en +2 a +15 días con el mismo criterio."}
+                  No hay tarifa error ni gran descuento
+                  {params && isFlexible(params.date, params.dateTo) ? " en esta ventana" : " para esta fecha"}.
+                  {hints.length > 0 ? " Revisa estas otras:" : " Tampoco aparecen en +2 a +15 días."}
                 </p>
               )}
               {hints.map((h) => (
@@ -692,7 +733,8 @@ export function SearchBoard() {
                     });
                   }}
                 >
-                  dentro de {h.days} días · {h.date} · {euro(h.price)} · ahorras {euro(h.savedEur)}
+                  dentro de {h.days} días · {h.date} · {euro(h.price)} ·{" "}
+                  {h.kind === "error" ? "tarifa error" : "gran descuento"} · ahorras {euro(h.savedEur)}
                 </button>
               ))}
               {ranked.error.map((hit) => (
@@ -702,7 +744,17 @@ export function SearchBoard() {
                   params={params}
                   tag={`tarifa error · −${hit.savePct}%`}
                   saved={hit.savedEur}
-                  extra={`Vs ${euro(hit.refPrice)} ${refMeta?.label ?? "de referencia"}.`}
+                  extra={`Vs ${euro(hit.refPrice)} ${refMeta?.label ?? "de referencia"}. Mitad o menos y ≥80 €.`}
+                />
+              ))}
+              {ranked.discount.map((hit) => (
+                <FlightCard
+                  key={hit.flight.id}
+                  flight={hit.flight}
+                  params={params}
+                  tag={`gran descuento · −${hit.savePct}%`}
+                  saved={hit.savedEur}
+                  extra={`Vs ${euro(hit.refPrice)} ${refMeta?.label ?? "de referencia"}. Oferta fuerte, no un error de tarifa.`}
                 />
               ))}
               {refFlights[0] && refMeta && (
@@ -720,8 +772,8 @@ export function SearchBoard() {
                 />
               )}
               <p className="ref">
-                Comparación con precios reales de Kiwi. Destino “cualquier sitio”: cada ciudad se compara con lo
-                que costaba esa misma ciudad la semana de referencia.
+                Tarifa error = ≤50 % del precio de hace una semana y al menos 80 € menos. Gran descuento =
+                ≥25 % y ≥25 €. Destino “cualquier sitio”: cada ciudad se compara consigo misma.
               </p>
               <SourceLinks p={params} />
             </>

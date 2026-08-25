@@ -6,12 +6,15 @@ import {
   type LiveFlight,
 } from "./types";
 
-export type ErrorHit = {
+export type DealHit = {
   flight: LiveFlight;
   savedEur: number;
   savePct: number;
   refPrice: number;
+  kind: "error" | "discount";
 };
+
+export type ErrorHit = DealHit;
 
 export type HiddenHit = {
   flight: LiveFlight;
@@ -25,6 +28,7 @@ export type DateHint = {
   days: number;
   price: number;
   savedEur: number;
+  kind: "error" | "discount";
 };
 
 export function routeKey(flight: LiveFlight): string {
@@ -60,16 +64,25 @@ export function hiddenCityOf(
   return { flight, getOff, ticketed, savedEur: flyToStop - flight.priceEur };
 }
 
-export function errorHitOf(flight: LiveFlight, cheapestRef: Map<string, number>): ErrorHit | null {
+function dealHitOf(
+  flight: LiveFlight,
+  cheapestRef: Map<string, number>,
+  kind: "error" | "discount",
+): DealHit | null {
   const refPrice = cheapestRef.get(routeKey(flight));
   const cmp = errorCompare(flight.priceEur, refPrice ?? null);
-  if (!cmp.looksLikeError || cmp.savedEur == null || refPrice == null) return null;
+  if (cmp.kind !== kind || cmp.savedEur == null || refPrice == null) return null;
   return {
     flight,
     savedEur: cmp.savedEur,
     savePct: Math.round((cmp.savedEur / refPrice) * 100),
     refPrice,
+    kind,
   };
+}
+
+export function errorHitOf(flight: LiveFlight, cheapestRef: Map<string, number>): DealHit | null {
+  return dealHitOf(flight, cheapestRef, "error");
 }
 
 export function rankFlights(
@@ -77,16 +90,18 @@ export function rankFlights(
   ref: LiveFlight[],
   requestedDest: string,
   bags: number,
-): { error: ErrorHit[]; hidden: HiddenHit[]; normal: LiveFlight[] } {
+): { error: DealHit[]; discount: DealHit[]; hidden: HiddenHit[]; normal: LiveFlight[] } {
   const cheapestNow = cheapestByRoute(now);
   const cheapestRef = cheapestByRoute(ref);
-  const error: ErrorHit[] = [];
+  const error: DealHit[] = [];
+  const discount: DealHit[] = [];
   const hidden: HiddenHit[] = [];
   const errorIds = new Set<string>();
+  const discountIds = new Set<string>();
   const hiddenIds = new Set<string>();
 
   for (const flight of now) {
-    const err = errorHitOf(flight, cheapestRef);
+    const err = dealHitOf(flight, cheapestRef, "error");
     if (err) {
       error.push(err);
       errorIds.add(flight.id);
@@ -104,8 +119,20 @@ export function rankFlights(
   }
   hidden.sort((a, b) => b.savedEur - a.savedEur);
 
-  const normal = now.filter((f) => !errorIds.has(f.id) && !hiddenIds.has(f.id));
-  return { error, hidden, normal };
+  for (const flight of now) {
+    if (errorIds.has(flight.id) || hiddenIds.has(flight.id)) continue;
+    const sale = dealHitOf(flight, cheapestRef, "discount");
+    if (sale) {
+      discount.push(sale);
+      discountIds.add(flight.id);
+    }
+  }
+  discount.sort((a, b) => b.savePct - a.savePct || b.savedEur - a.savedEur);
+
+  const normal = now.filter(
+    (f) => !errorIds.has(f.id) && !hiddenIds.has(f.id) && !discountIds.has(f.id),
+  );
+  return { error, discount, hidden, normal };
 }
 
 export function altOffsetsFor(origin: string, dest: string, flexible = false): readonly number[] {
@@ -120,8 +147,8 @@ export function dateHints(
   const out: DateHint[] = [];
   for (const alt of alts) {
     const cmp = errorCompare(alt.cheapest, refPrice);
-    if (!cmp.looksLikeError || cmp.savedEur == null || alt.cheapest == null) continue;
-    out.push({ date: alt.date, days: alt.days, price: alt.cheapest, savedEur: cmp.savedEur });
+    if (!cmp.kind || cmp.savedEur == null || alt.cheapest == null) continue;
+    out.push({ date: alt.date, days: alt.days, price: alt.cheapest, savedEur: cmp.savedEur, kind: cmp.kind });
   }
   return out.sort((a, b) => a.days - b.days);
 }

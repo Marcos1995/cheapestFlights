@@ -52,8 +52,11 @@ test("week-ago reference prefers past week unless that date already passed", () 
 
 test("error fare needs a real drop vs the reference week", () => {
   assert.equal(errorCompare(200, 1000).looksLikeError, true);
+  assert.equal(errorCompare(200, 1000).kind, "error");
   assert.equal(errorCompare(200, 1000).savedEur, 800);
-  assert.equal(errorCompare(90, 100).looksLikeError, false);
+  assert.equal(errorCompare(70, 100).looksLikeError, false);
+  assert.equal(errorCompare(70, 100).kind, "discount");
+  assert.equal(errorCompare(90, 100).kind, null);
   assert.equal(errorCompare(27, null).looksLikeError, false);
 });
 

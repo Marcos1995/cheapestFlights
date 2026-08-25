@@ -31,9 +31,10 @@ function flight(partial: Partial<LiveFlight> & Pick<LiveFlight, "id" | "priceEur
   };
 }
 
-test("error fares rank ahead of hidden city and normal, biggest cut first", () => {
+test("error fares rank ahead of hidden city; weekly sales are discounts, not errors", () => {
   const now = [
     flight({ id: "direct", priceEur: 200, ticketedDest: "FCO" }),
+    flight({ id: "sale", priceEur: 140, ticketedDest: "FCO" }),
     flight({ id: "error", priceEur: 80, ticketedDest: "MAD" }),
     flight({
       id: "hidden",
@@ -60,7 +61,10 @@ test("error fares rank ahead of hidden city and normal, biggest cut first", () =
   ];
   const ranked = rankFlights(now, ref, "FCO", 0);
   assert.equal(ranked.error[0]?.flight.id, "error");
+  assert.equal(ranked.error[0]?.kind, "error");
   assert.ok((ranked.error[0]?.savePct ?? 0) >= 50);
+  assert.equal(ranked.discount[0]?.flight.id, "sale");
+  assert.equal(ranked.discount[0]?.kind, "discount");
   assert.equal(ranked.hidden[0]?.flight.id, "hidden");
   assert.equal(ranked.hidden[0]?.getOff, "FCO");
   assert.equal(ranked.normal[0]?.id, "direct");
@@ -140,14 +144,18 @@ test("error fares compare the same origin-destination pair", () => {
 test("date hints only keep real error drops", () => {
   const hints = dateHints(
     [
-      { date: "2026-09-17", days: 2, cheapest: 180 },
+      { date: "2026-09-17", days: 2, cheapest: 150 },
+      { date: "2026-09-18", days: 3, cheapest: 180 },
       { date: "2026-09-20", days: 5, cheapest: 40 },
     ],
     200,
   );
-  assert.equal(hints.length, 1);
-  assert.equal(hints[0].days, 5);
-  assert.equal(hints[0].savedEur, 160);
+  assert.equal(hints.length, 2);
+  assert.equal(hints[0].days, 2);
+  assert.equal(hints[0].kind, "discount");
+  assert.equal(hints[1].days, 5);
+  assert.equal(hints[1].savedEur, 160);
+  assert.equal(hints[1].kind, "error");
   assert.deepEqual(altOffsetsFor("ANY", "FCO"), []);
   assert.deepEqual(altOffsetsFor("BCN", "FCO", true), []);
 });
