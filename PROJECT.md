@@ -20,4 +20,4 @@
 - Preferencias / arquitectura: wedge BCN one-way; no clonar Skyscanner; hidden-city opcional y etiquetado; tarifas error fuera del search
 - Cosas que NO tocar: no añadir GDS/scraper en v1; no mezclar badges de desvío legal y ciudad oculta
 - gstack only (ver AGENTS.md)
-- Diseño: `docs/designs/desvio-cheaper-weird-itineraries.md`
+- Diseño: `docs/designs/desvio-freeze-measure-demand.md` (vigente). Anterior: `docs/designs/desvio-cheaper-weird-itineraries.md`

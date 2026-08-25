@@ -71,4 +71,4 @@ Message 10 people who flew from BCN in the last year. Ask what they paid, whethe
 
 ## Reviewer Concerns
 
-Adversarial review scored 5/10 then 7/10. Remaining iteration-2 issues (schema, BUR/RGS, BCN-only, error-fare identity, success bars) were patched in the private store doc. Iteration 3 was not re-run. Residual risk: mock prices will not match live inventory.
+Adversarial review scored 5/10 then 7/10. Remaining issues patched. **Superseded by** `docs/designs/desvio-freeze-measure-demand.md` (session 2: freeze and interview).
