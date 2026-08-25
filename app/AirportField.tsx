@@ -8,14 +8,21 @@ export function AirportField({
   value,
   onChange,
   allowAnywhere = false,
+  anywhereKind = "dest",
 }: {
   label: string;
   value: string;
   onChange: (iata: string) => void;
   allowAnywhere?: boolean;
+  anywhereKind?: "origin" | "dest";
 }) {
+  const anywhereTitle = anywhereKind === "origin" ? "Cualquier origen" : "Cualquier destino";
+  const anywhereHint =
+    anywhereKind === "origin"
+      ? "De cualquier aeropuerto del mundo"
+      : "Asia, Europa, América… el más barato primero";
   const [text, setText] = useState(() => {
-    if (value === "ANY") return "Cualquier destino";
+    if (value === "ANY") return anywhereTitle;
     const a = getAirport(value);
     return a ? labelAirport(a) : value;
   });
@@ -24,12 +31,12 @@ export function AirportField({
 
   useEffect(() => {
     if (value === "ANY") {
-      setText("Cualquier destino");
+      setText(anywhereTitle);
       return;
     }
     const a = getAirport(value);
     if (a) setText(labelAirport(a));
-  }, [value]);
+  }, [value, anywhereTitle]);
 
   useEffect(() => {
     function close(e: MouseEvent) {
@@ -49,7 +56,7 @@ export function AirportField({
 
   function pickAnywhere() {
     onChange("ANY");
-    setText("Cualquier destino");
+    setText(anywhereTitle);
     setOpen(false);
   }
 
@@ -88,8 +95,8 @@ export function AirportField({
             <li>
               <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={pickAnywhere}>
                 <b className="iata">∞</b>
-                <span className="city">Cualquier destino</span>
-                <span className="airport-name">Asia, Europa, América… el más barato primero</span>
+                <span className="city">{anywhereTitle}</span>
+                <span className="airport-name">{anywhereHint}</span>
                 <span className="country">todo el mundo</span>
               </button>
             </li>

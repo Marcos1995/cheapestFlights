@@ -27,11 +27,16 @@ export type DateHint = {
   savedEur: number;
 };
 
-export function cheapestByDest(flights: LiveFlight[]): Map<string, number> {
+export function routeKey(flight: LiveFlight): string {
+  return `${flight.outbound.from}-${flight.ticketedDest}`;
+}
+
+export function cheapestByRoute(flights: LiveFlight[]): Map<string, number> {
   const map = new Map<string, number>();
   for (const f of flights) {
-    const prev = map.get(f.ticketedDest);
-    if (prev == null || f.priceEur < prev) map.set(f.ticketedDest, f.priceEur);
+    const key = routeKey(f);
+    const prev = map.get(key);
+    if (prev == null || f.priceEur < prev) map.set(key, f.priceEur);
   }
   return map;
 }
@@ -50,13 +55,13 @@ export function hiddenCityOf(
       ? requestedDest
       : null;
   if (!getOff || getOff === ticketed) return null;
-  const flyToStop = cheapestNow.get(getOff);
+  const flyToStop = cheapestNow.get(`${flight.outbound.from}-${getOff}`);
   if (flyToStop == null || flight.priceEur >= flyToStop) return null;
   return { flight, getOff, ticketed, savedEur: flyToStop - flight.priceEur };
 }
 
 export function errorHitOf(flight: LiveFlight, cheapestRef: Map<string, number>): ErrorHit | null {
-  const refPrice = cheapestRef.get(flight.ticketedDest);
+  const refPrice = cheapestRef.get(routeKey(flight));
   const cmp = errorCompare(flight.priceEur, refPrice ?? null);
   if (!cmp.looksLikeError || cmp.savedEur == null || refPrice == null) return null;
   return {
@@ -73,8 +78,8 @@ export function rankFlights(
   requestedDest: string,
   bags: number,
 ): { error: ErrorHit[]; hidden: HiddenHit[]; normal: LiveFlight[] } {
-  const cheapestNow = cheapestByDest(now);
-  const cheapestRef = cheapestByDest(ref);
+  const cheapestNow = cheapestByRoute(now);
+  const cheapestRef = cheapestByRoute(ref);
   const error: ErrorHit[] = [];
   const hidden: HiddenHit[] = [];
   const errorIds = new Set<string>();
@@ -103,7 +108,8 @@ export function rankFlights(
   return { error, hidden, normal };
 }
 
-export function altOffsetsFor(dest: string): readonly number[] {
+export function altOffsetsFor(origin: string, dest: string): readonly number[] {
+  if (isAnywhere(origin)) return [];
   return isAnywhere(dest) ? ANY_ALT_OFFSETS : ALT_OFFSETS;
 }
 

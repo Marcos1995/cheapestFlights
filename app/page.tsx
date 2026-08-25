@@ -12,8 +12,8 @@ export default function HomePage() {
           </div>
         </div>
         <p>
-          Busca ida o ida y vuelta, o desde un aeropuerto a cualquier destino. Primero las tarifas
-          error, luego ciudad oculta, después lo normal.
+          Busca origen y destino concretos, o cualquiera de los dos (o los dos). Lo primero: tarifas
+          error y descuentos brutales.
         </p>
         <div className="stamp">precios reales</div>
       </header>

@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { googleFlightsUrl, kiwiBookingUrl, kiwiSearchUrl, skyscannerUrl } from "./links";
 import { parseItineraries } from "./kiwi";
-import { addDays, errorCompare, isPastDate, referenceDate, skyDate } from "./types";
+import { addDays, errorCompare, isPastDate, kiwiPlaceId, referenceDate, skyDate } from "./types";
+
+test("kiwiPlaceId maps ANY to anywhere", () => {
+  assert.equal(kiwiPlaceId("BCN"), "BCN");
+  assert.equal(kiwiPlaceId("ANY"), "anywhere");
+});
 
 test("isPastDate treats today as valid", () => {
   assert.equal(isPastDate("2026-08-25", new Date(2026, 7, 25)), false);
@@ -100,4 +105,14 @@ test("anywhere links drop the destination airport", () => {
   assert.match(decodeURIComponent(googleFlightsUrl(p)), /desde BCN/);
   assert.match(skyscannerUrl(p), /vuelos-desde\/bcn\/260915/);
   assert.match(kiwiSearchUrl(p), /\/bcn\/anywhere\/2026-09-15/);
+});
+
+test("anywhere origin and dest links", () => {
+  const fromAny = { origin: "ANY", dest: "FCO", date: "2026-09-15", adults: 1, cabin: "ECONOMY" as const };
+  assert.match(decodeURIComponent(googleFlightsUrl(fromAny)), /Vuelos a FCO/);
+  assert.match(skyscannerUrl(fromAny), /vuelos-hacia\/fco\/260915/);
+  assert.match(kiwiSearchUrl(fromAny), /\/anywhere\/fco\/2026-09-15/);
+  const both = { origin: "ANY", dest: "ANY", date: "2026-09-15", adults: 1, cabin: "ECONOMY" as const };
+  assert.match(decodeURIComponent(googleFlightsUrl(both)), /Vuelos baratos/);
+  assert.match(kiwiSearchUrl(both), /\/anywhere\/anywhere\/2026-09-15/);
 });

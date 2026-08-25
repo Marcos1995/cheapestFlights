@@ -1,4 +1,4 @@
-import { isAnywhere, type Airline, type Cabin, type Leg, type LiveFlight } from "./types";
+import { isAnywhere, kiwiPlaceId, type Airline, type Cabin, type Leg, type LiveFlight } from "./types";
 import { kiwiBookingUrl } from "./links";
 
 const ONEWAY = `query SearchOneWayItinerariesQuery($search: SearchOnewayInput, $filter: ItinerariesFilterInput, $options: ItinerariesOptionsInput) {
@@ -211,6 +211,8 @@ function options() {
   };
 }
 
+const ANY_ORIGIN_HUBS = ["BCN", "MAD", "LHR", "CDG", "AMS", "FRA", "JFK", "DXB"];
+
 export async function fetchKiwiFlights(p: {
   origin: string;
   dest: string;
@@ -221,8 +223,40 @@ export async function fetchKiwiFlights(p: {
   bags: number;
   limit?: number;
 }): Promise<LiveFlight[]> {
+  if (isAnywhere(p.origin)) {
+    const dest = kiwiPlaceId(p.dest);
+    const hubs = ANY_ORIGIN_HUBS.filter((h) => h !== dest);
+    const lists = await Promise.all(
+      hubs.map((origin) =>
+        fetchKiwiOnce({ ...p, origin, limit: p.limit ?? 8 }).catch(() => [] as LiveFlight[]),
+      ),
+    );
+    const seen = new Set<string>();
+    const merged: LiveFlight[] = [];
+    for (const list of lists) {
+      for (const f of list) {
+        if (seen.has(f.id)) continue;
+        seen.add(f.id);
+        merged.push(f);
+      }
+    }
+    return merged.sort((a, b) => a.priceEur - b.priceEur);
+  }
+  return fetchKiwiOnce(p);
+}
+
+async function fetchKiwiOnce(p: {
+  origin: string;
+  dest: string;
+  date: string;
+  returnDate?: string | null;
+  adults: number;
+  cabin: Cabin;
+  bags: number;
+  limit?: number;
+}): Promise<LiveFlight[]> {
   const roundTrip = Boolean(p.returnDate);
-  const destId = isAnywhere(p.dest) ? "anywhere" : p.dest;
+  const destId = kiwiPlaceId(p.dest);
   const itinerary: Record<string, unknown> = {
     source: { ids: [p.origin] },
     destination: { ids: [destId] },

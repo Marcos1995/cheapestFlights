@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { dateHints, hiddenCityOf, rankFlights } from "./rank";
+import { altOffsetsFor, dateHints, hiddenCityOf, rankFlights } from "./rank";
 import type { LiveFlight } from "./types";
 
 function flight(partial: Partial<LiveFlight> & Pick<LiveFlight, "id" | "priceEur" | "ticketedDest">): LiveFlight {
@@ -82,9 +82,54 @@ test("hidden city stays off with checked bags", () => {
       airlines: [{ code: "IB", name: "Iberia" }],
     },
   });
-  const map = new Map([["FCO", 200]]);
+  const map = new Map([["BCN-FCO", 200]]);
   assert.equal(hiddenCityOf(hid, "FCO", 1, map), null);
   assert.ok(hiddenCityOf(hid, "FCO", 0, map));
+});
+
+test("error fares compare the same origin-destination pair", () => {
+  const now = [
+    flight({
+      id: "jfk-cheap",
+      priceEur: 50,
+      ticketedDest: "FCO",
+      outbound: {
+        from: "JFK",
+        to: "FCO",
+        fromName: "New York",
+        toName: "Rome",
+        depart: "10:00",
+        arrive: "22:00",
+        durationMin: 480,
+        stops: [],
+        layoverMinutes: 0,
+        airlines: [{ code: "AA", name: "American" }],
+      },
+    }),
+  ];
+  const ref = [
+    flight({ id: "bcn-ref", priceEur: 200, ticketedDest: "FCO" }),
+    flight({
+      id: "jfk-ref",
+      priceEur: 400,
+      ticketedDest: "FCO",
+      outbound: {
+        from: "JFK",
+        to: "FCO",
+        fromName: "New York",
+        toName: "Rome",
+        depart: "10:00",
+        arrive: "22:00",
+        durationMin: 480,
+        stops: [],
+        layoverMinutes: 0,
+        airlines: [{ code: "AA", name: "American" }],
+      },
+    }),
+  ];
+  const ranked = rankFlights(now, ref, "ANY", 0);
+  assert.equal(ranked.error[0]?.flight.id, "jfk-cheap");
+  assert.equal(ranked.error[0]?.refPrice, 400);
 });
 
 test("date hints only keep real error drops", () => {
@@ -98,4 +143,5 @@ test("date hints only keep real error drops", () => {
   assert.equal(hints.length, 1);
   assert.equal(hints[0].days, 5);
   assert.equal(hints[0].savedEur, 160);
+  assert.deepEqual(altOffsetsFor("ANY", "FCO"), []);
 });

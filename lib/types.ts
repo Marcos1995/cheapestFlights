@@ -46,8 +46,12 @@ export type SearchParams = {
   airline: string;
 };
 
-export function isAnywhere(dest: string): boolean {
-  return dest === ANY_DEST || dest.toLowerCase() === "anywhere";
+export function isAnywhere(code: string): boolean {
+  return code === ANY_DEST || code.toLowerCase() === "anywhere";
+}
+
+export function kiwiPlaceId(code: string): string {
+  return isAnywhere(code) ? "anywhere" : code;
 }
 
 export function isPastDate(date: string, now = new Date()): boolean {

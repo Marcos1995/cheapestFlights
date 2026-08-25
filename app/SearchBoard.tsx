@@ -62,11 +62,19 @@ const EMPTY: Record<EmptyReason, string> = {
 
 function validate(p: SearchParams, now = new Date()): EmptyReason | null {
   if (isPastDate(p.date, now)) return "past_date";
-  if (!getAirport(p.origin)) return "unknown_route";
+  if (!isAnywhere(p.origin) && !getAirport(p.origin)) return "unknown_route";
   if (!isAnywhere(p.dest) && !getAirport(p.dest)) return "unknown_route";
-  if (!isAnywhere(p.dest) && p.origin === p.dest) return "same_airport";
+  if (!isAnywhere(p.origin) && !isAnywhere(p.dest) && p.origin === p.dest) return "same_airport";
   if (p.returnDate && (isPastDate(p.returnDate, now) || p.returnDate < p.date)) return "bad_return";
   return null;
+}
+
+function pinParams(params: SearchParams, flight: LiveFlight): SearchParams {
+  return {
+    ...params,
+    origin: isAnywhere(params.origin) ? flight.outbound.from : params.origin,
+    dest: isAnywhere(params.dest) ? flight.ticketedDest : params.dest,
+  };
 }
 
 function SourceLinks({ p, airlineName }: { p: SearchParams; airlineName?: string }) {
@@ -104,7 +112,7 @@ function FlightCard({
   extra?: string;
 }) {
   const names = flight.airlines.map((a) => a.name).join(" + ");
-  const destLabel = isAnywhere(params.dest) ? flight.ticketedDest : params.dest;
+  const pinned = pinParams(params, flight);
   return (
     <article className={`card ${hard ? "hidden_city" : flight.stopCount ? "detour" : "simple"}`}>
       <div className="card-top">
@@ -129,7 +137,7 @@ function FlightCard({
             <div>
               <b>{flight.outbound.depart}</b>
               <small>
-                sale {flight.outbound.from} → {destLabel}
+                sale {pinned.origin} → {pinned.dest}
               </small>
             </div>
             <div>
@@ -174,8 +182,7 @@ function FlightCard({
         <a
           className="book google"
           href={googleFlightsUrl({
-            ...params,
-            dest: isAnywhere(params.dest) ? flight.ticketedDest : params.dest,
+            ...pinned,
             airlineName: flight.airlines[0]?.name,
           })}
           target="_blank"
@@ -185,10 +192,7 @@ function FlightCard({
         </a>
         <a
           className="book sky"
-          href={skyscannerUrl({
-            ...params,
-            dest: isAnywhere(params.dest) ? flight.ticketedDest : params.dest,
-          })}
+          href={skyscannerUrl(pinned)}
           target="_blank"
           rel="noopener noreferrer"
         >
@@ -228,6 +232,7 @@ export function SearchBoard() {
   }, [dest]);
 
   const originName = useMemo(() => {
+    if (isAnywhere(origin)) return "cualquier origen";
     const a = getAirport(origin);
     return a ? labelAirport(a) : origin;
   }, [origin]);
@@ -288,7 +293,7 @@ export function SearchBoard() {
           returnDate: next.returnDate ? shiftReturn(next.date, next.returnDate, ref.date) : null,
         }).catch(() => [] as LiveFlight[]),
         Promise.all(
-          altOffsetsFor(next.dest).map(async (days) => {
+          altOffsetsFor(next.origin, next.dest).map(async (days) => {
             const date = addDays(next.date, days);
             if (isPastDate(date)) return { date, days, cheapest: null as number | null };
             try {
@@ -330,8 +335,8 @@ export function SearchBoard() {
   return (
     <>
       <form className="search world" onSubmit={onSubmit}>
-        <AirportField label="Origen" value={origin} onChange={setOrigin} />
-        <AirportField label="Destino" value={dest} onChange={setDest} allowAnywhere />
+        <AirportField label="Origen" value={origin} onChange={setOrigin} allowAnywhere anywhereKind="origin" />
+        <AirportField label="Destino" value={dest} onChange={setDest} allowAnywhere anywhereKind="dest" />
         <label>
           Tipo
           <select
