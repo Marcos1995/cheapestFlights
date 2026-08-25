@@ -12,15 +12,15 @@ export default function HomePage() {
           </div>
         </div>
         <p>
-          Google Flights te enseña el vuelo obvio. Aquí sale el obvio, el desvío legal más barato,
-          y —si lo abres— la ciudad oculta. Solo ida desde Barcelona. Precios de catálogo mock.
+          De cualquier aeropuerto a cualquier otro. Directo estándar, escala más barata, tarifa
+          error si el modelo la marca en esa fecha, y ciudad oculta opcional. Maletas, kilos y
+          asiento suman al total.
         </p>
         <div className="stamp">no es skyscanner</div>
       </header>
       <SearchBoard />
       <p className="demo-note">
-        Las tarifas error (un vuelo de 1.000 € a 200 €) no viven en el buscador: duran horas y
-        piden alerta, no comparador. Hay una maqueta en{" "}
+        Precios ilustrativos en el cliente (aún no hay GDS). La maqueta clásica de glitch está en{" "}
         <Link href="/demo/tarifa-error">/demo/tarifa-error</Link>.
       </p>
     </main>

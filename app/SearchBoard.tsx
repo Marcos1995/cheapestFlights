@@ -1,17 +1,18 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
-import { searchFlights } from "@/lib/engine";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { AirportField } from "./AirportField";
+import { getAirport, labelAirport } from "@/lib/airports";
+import { nextErrorDates, searchFlights } from "@/lib/engine";
 import type { Offer, SearchResponse } from "@/lib/types";
-import catalog from "@/lib/catalog.json";
-
-const DESTINATIONS = catalog.destinations as string[];
-const AIRPORTS = catalog.airports as Record<string, { city: string; name: string }>;
 
 function defaultDate(): string {
   const d = new Date();
   d.setDate(d.getDate() + 21);
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function euro(n: number): string {
@@ -31,21 +32,19 @@ function minutesLabel(min: number): string {
 
 const EMPTY: Record<NonNullable<SearchResponse["emptyReason"]>, string> = {
   past_date: "Esa fecha ya pasó. Elige un día de hoy en adelante.",
-  unknown_route: "Aún no cubrimos esa ruta. Prueba BCN → FCO.",
-  no_simple: "No hay un vuelo simple en el catálogo para esa pareja.",
-  no_detour: "Hay vuelo simple, pero ningún desvío más barato dentro de tu tiempo extra.",
-  no_hidden_city: "No hay plantilla de ciudad oculta para esa ruta.",
+  unknown_route: "Ese aeropuerto no está en la red. Prueba un IATA (BCN, JFK, NRT…).",
+  same_airport: "Origen y destino no pueden ser el mismo.",
 };
 
 function Card({ offer, title }: { offer: Offer; title: string }) {
   const saved = offer.savedEur && offer.savedEur > 0 ? offer.savedEur : null;
+  const badgeClass =
+    offer.bucket === "hidden_city" ? "hard" : offer.bucket === "simple" ? "" : "save";
   return (
     <article className={`card ${offer.bucket}`}>
       <div className="card-top">
         <div>
-          <span className={`badge ${offer.bucket === "hidden_city" ? "hard" : offer.bucket === "detour" ? "save" : ""}`}>
-            {title}
-          </span>
+          <span className={`badge ${badgeClass}`}>{title}</span>
           <div className="times">
             <div>
               <b>{offer.depart}</b>
@@ -59,16 +58,24 @@ function Card({ offer, title }: { offer: Offer; title: string }) {
         </div>
         <div className="price">
           {euro(offer.priceEur)}
-          {saved ? <span>ahorras {euro(saved)} frente al simple</span> : <span>precio de referencia</span>}
+          {saved ? (
+            <span>ahorras {euro(saved)} vs el directo estándar</span>
+          ) : offer.bucket === "simple" ? (
+            <span>precio de referencia (directo)</span>
+          ) : (
+            <span>no mejora el directo</span>
+          )}
         </div>
       </div>
       <p className="explain">{offer.explanation}</p>
       <div className="meta">
         {offer.airlines.join(" + ")}
-        {offer.stops.length ? ` · escalas ${offer.stops.join(", ")}` : " · sin escalas"}
-        {offer.kind === "nearby" && offer.ticketedDest ? ` · aterrizas en ${offer.ticketedDest}` : ""}
+        {offer.stops.length ? ` · escala ${offer.stops.join(", ")}` : " · sin escalas"}
+        {offer.layoverMinutes > 0 ? ` · espera ${minutesLabel(offer.layoverMinutes)}` : ""}
         {offer.kind === "hidden_city" && offer.ticketedDest ? ` · billete hasta ${offer.ticketedDest}` : ""}
-        {" · fuente mock"}
+        {" · "}billete {euro(offer.baseEur)}
+        {offer.extrasEur > 0 ? ` + extras ${euro(offer.extrasEur)}` : ""}
+        {" · ilustrativo"}
       </div>
       {offer.riskFlags.length > 0 && (
         <div className="flags">
@@ -79,7 +86,7 @@ function Card({ offer, title }: { offer: Offer; title: string }) {
             <span className="badge hard">contrato de la aerolínea en contra</span>
           )}
           {offer.riskFlags.includes("checked_bag_hidden_city") && (
-            <span className="badge hard">maleta facturada sigue hasta el destino del billete</span>
+            <span className="badge hard">maleta facturada seguiría hasta el destino del billete</span>
           )}
         </div>
       )}
@@ -88,83 +95,117 @@ function Card({ offer, title }: { offer: Offer; title: string }) {
 }
 
 export function SearchBoard() {
+  const [origin, setOrigin] = useState("BCN");
   const [dest, setDest] = useState("FCO");
   const [date, setDate] = useState(defaultDate);
-  const [maxExtraHours, setMaxExtraHours] = useState(6);
-  const [referencePrice, setReferencePrice] = useState("");
+  const [maxLayoverHours, setMaxLayoverHours] = useState(4);
+  const [bags, setBags] = useState(0);
+  const [bagKg, setBagKg] = useState<23 | 32>(23);
+  const [seat, setSeat] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SearchResponse | null>(null);
 
-  const destLabel = useMemo(() => {
-    const a = AIRPORTS[dest];
-    return a ? `${a.city} (${dest})` : dest;
+  const destName = useMemo(() => {
+    const a = getAirport(dest);
+    return a ? labelAirport(a) : dest;
   }, [dest]);
 
-  function onSubmit(e: FormEvent) {
-    e.preventDefault();
+  const errorHints = useMemo(() => nextErrorDates(origin, dest, date, 24).slice(0, 4), [origin, dest, date]);
+
+  function run(nextDate = date) {
     setError(null);
-    if (!dest || !date) {
-      setError("Faltan destino o fecha");
+    if (!origin || !dest) {
+      setError("Elige origen y destino");
       setResult(null);
       return;
     }
-    const data = searchFlights({
-      origin: "BCN",
-      dest,
-      date,
-      maxExtraHours,
-      referencePrice: referencePrice ? Number(referencePrice) : undefined,
-    });
-    setResult(data);
+    setDate(nextDate);
+    setResult(
+      searchFlights({
+        origin,
+        dest,
+        date: nextDate,
+        maxLayoverHours,
+        bags,
+        bagKg,
+        seat,
+      }),
+    );
   }
+
+  function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    run(date);
+  }
+
+  useEffect(() => {
+    if (!result) return;
+    setResult(
+      searchFlights({
+        origin,
+        dest,
+        date,
+        maxLayoverHours,
+        bags,
+        bagKg,
+        seat,
+      }),
+    );
+    // Recalculate extras/layover on the last searched route without forcing origin edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [maxLayoverHours, bags, bagKg, seat]);
 
   return (
     <>
-      <form className="search" onSubmit={onSubmit}>
-        <label>
-          Origen
-          <input value="Barcelona (BCN)" readOnly />
-        </label>
-        <label>
-          Destino
-          <select value={dest} onChange={(e) => setDest(e.target.value)}>
-            {DESTINATIONS.map((code) => (
-              <option key={code} value={code}>
-                {AIRPORTS[code]?.city ?? code} ({code})
-              </option>
-            ))}
-          </select>
-        </label>
+      <form className="search world" onSubmit={onSubmit}>
+        <AirportField label="Origen" value={origin} onChange={setOrigin} />
+        <AirportField label="Destino" value={dest} onChange={setDest} />
         <label>
           Ida
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
         </label>
         <label>
-          Tiempo extra máx.
+          Espera máx. en escala
           <select
-            value={String(maxExtraHours)}
-            onChange={(e) => setMaxExtraHours(Number(e.target.value))}
+            value={String(maxLayoverHours)}
+            onChange={(e) => setMaxLayoverHours(Number(e.target.value))}
           >
-            {[2, 4, 6, 8, 12].map((h) => (
+            {[1, 2, 3, 4, 6, 8, 12].map((h) => (
               <option key={h} value={h}>
-                {h} horas
+                {h} h
               </option>
             ))}
           </select>
         </label>
         <button type="submit">Buscar</button>
       </form>
+
+      <div className="extras">
+        <label>
+          Maletas facturadas
+          <select value={String(bags)} onChange={(e) => setBags(Number(e.target.value))}>
+            {[0, 1, 2, 3].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Kg por maleta
+          <select value={String(bagKg)} onChange={(e) => setBagKg(Number(e.target.value) === 32 ? 32 : 23)}>
+            <option value={23}>23 kg</option>
+            <option value={32}>32 kg</option>
+          </select>
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={seat} onChange={(e) => setSeat(e.target.checked)} />
+          Elegir asiento (+24 €)
+        </label>
+      </div>
       <p className="ref">
-        Opcional, el precio que viste tú:{" "}
-        <input
-          type="number"
-          min={1}
-          placeholder="€"
-          value={referencePrice}
-          onChange={(e) => setReferencePrice(e.target.value)}
-          style={{ width: 80, font: "inherit", background: "transparent", border: "none", borderBottom: "1px solid #1c1712" }}
-        />{" "}
-        no se scrapea Google. Solo sirve para compararte.
+        Maleta 23 kg = 32 € · 32 kg = 48 €. Sin maleta facturada la ciudad oculta puede aparecer. Con
+        maleta, no: el equipaje iría al destino del billete.
       </p>
       {error && <p className="error">{error}</p>}
 
@@ -174,11 +215,49 @@ export function SearchBoard() {
 
       {result?.simple && (
         <div className="results">
-          <Card offer={result.simple} title="Vuelo simple" />
-          {result.detour ? (
-            <Card offer={result.detour} title="Desvío legal" />
+          {result.hasErrorNow ? (
+            <p className="banner error-now">
+              En esta fecha el modelo marca una <strong>tarifa error</strong> en {result.origin}–
+              {result.dest}: el directo sale {euro(result.errorFare?.baseEur ?? 0)} en vez de{" "}
+              {euro(result.simple.baseEur)}.
+            </p>
           ) : (
-            <p className="empty">No hay un desvío legal más barato hacia {destLabel} con ese tiempo extra.</p>
+            <p className="banner">
+              No hay tarifa error en {date} para esta ruta.
+              {errorHints.length > 0 && (
+                <>
+                  {" "}
+                  Fechas con glitch ilustrativo:{" "}
+                  {errorHints.map((d) => (
+                    <button key={d} type="button" className="date-chip" onClick={() => run(d)}>
+                      {d}
+                    </button>
+                  ))}
+                </>
+              )}
+            </p>
+          )}
+
+          {result.detourBeatsSimple ? (
+            <p className="banner save">
+              Sí ahorras frente al directo estándar: {euro(result.detour?.savedEur ?? 0)} con una
+              escala (espera {minutesLabel(result.detour?.layoverMinutes ?? 0)}).
+            </p>
+          ) : (
+            <p className="banner">
+              En {result.origin}→{result.dest} el directo gana dentro de {maxLayoverHours} h de espera.
+              Sube el tiempo de escala o prueba otra fecha.
+            </p>
+          )}
+
+          <Card offer={result.simple} title="Directo estándar" />
+          {result.errorFare ? <Card offer={result.errorFare} title="Tarifa error" /> : null}
+          {result.detour ? (
+            <Card offer={result.detour} title="Más barato con escala" />
+          ) : (
+            <p className="empty">
+              No hay una escala más barata hacia {destName} con {maxLayoverHours} h de espera.
+            </p>
           )}
           {result.hiddenCity ? (
             <div className="hidden-wrap">
@@ -189,12 +268,8 @@ export function SearchBoard() {
                 </div>
               </details>
             </div>
-          ) : null}
-          {result.referencePrice ? (
-            <p className="meta">
-              Tu precio de referencia: {euro(result.referencePrice)}. El simple del catálogo es{" "}
-              {euro(result.simple.priceEur)}.
-            </p>
+          ) : bags > 0 ? (
+            <p className="meta">Ciudad oculta oculta: llevas maleta facturada.</p>
           ) : null}
         </div>
       )}

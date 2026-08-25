@@ -1,4 +1,4 @@
-export type Bucket = "simple" | "detour" | "hidden_city";
+export type Bucket = "simple" | "detour" | "error_fare" | "hidden_city";
 
 export type Risk =
   | "self_transfer"
@@ -6,18 +6,16 @@ export type Risk =
   | "checked_bag_hidden_city"
   | "extra_time_over_6h";
 
-export type EmptyReason =
-  | "unknown_route"
-  | "no_detour"
-  | "no_hidden_city"
-  | "no_simple"
-  | "past_date";
+export type EmptyReason = "unknown_route" | "same_airport" | "past_date";
 
 export type Offer = {
   bucket: Bucket;
+  baseEur: number;
+  extrasEur: number;
   priceEur: number;
   savedEur: number | null;
   extraMinutes: number;
+  layoverMinutes: number;
   airlines: string[];
   stops: string[];
   flyAllSegments: boolean;
@@ -27,7 +25,7 @@ export type Offer = {
   depart: string;
   arrive: string;
   durationMin: number;
-  kind: "nonstop" | "one_ticket" | "self_transfer" | "nearby" | "hidden_city";
+  kind: "nonstop" | "one_ticket" | "self_transfer" | "nearby" | "hidden_city" | "error_fare";
   ticketedDest?: string;
   getOff?: string;
 };
@@ -36,35 +34,26 @@ export type SearchRequest = {
   origin: string;
   dest: string;
   date: string;
-  maxExtraHours: number;
+  maxLayoverHours: number;
+  bags: number;
+  bagKg: 23 | 32;
+  seat: boolean;
   referencePrice?: number;
 };
 
 export type SearchResponse = {
   simple: Offer | null;
   detour: Offer | null;
+  errorFare: Offer | null;
   hiddenCity: Offer | null;
   emptyReason: EmptyReason | null;
   origin: string;
   dest: string;
   date: string;
-  maxExtraHours: number;
+  maxLayoverHours: number;
+  extras: { bags: number; bagKg: 23 | 32; seat: boolean; extrasEur: number };
+  km: number;
+  hasErrorNow: boolean;
+  detourBeatsSimple: boolean;
   referencePrice?: number;
-};
-
-export type CatalogFare = {
-  origin: string;
-  dest: string;
-  priceEur: number;
-  durationMin: number;
-  airlines: string[];
-  stops: string[];
-  depart: string;
-  arrive: string;
-  explanation: string;
-  kind: Offer["kind"];
-  flyAllSegments: boolean;
-  ticketedDest?: string;
-  getOff?: string;
-  intent?: string;
 };

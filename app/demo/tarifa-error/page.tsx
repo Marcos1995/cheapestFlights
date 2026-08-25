@@ -34,8 +34,8 @@ export default function ErrorFareDemo() {
         </div>
         <p className="explain">
           Así se vería una tarifa error: el mismo BCN–Roma de siempre, mal etiquetado por la
-          aerolínea. En Desvío v1 esto no se busca. Si construimos v2, será un ping (Telegram o
-          email) el minuto en que el precio se cae, no otra pestaña de Skyscanner.
+          aerolínea. En el buscador ahora hay un modelo ilustrativo por fecha; si un día hay GDS
+          real, esto será una alerta, no otra pestaña de Skyscanner.
         </p>
       </article>
       <p className="demo-note">

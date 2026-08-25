@@ -7,7 +7,7 @@
 
 ## Stack
 - Next.js 15 App Router, TypeScript, React 19, `output: "export"`
-- Motor de búsqueda mock en `lib/engine.ts` + `lib/catalog.json` (cliente, sin API)
+- Motor ilustrativo mundial en `lib/engine.ts` + `lib/airports.ts` (cliente, sin GDS)
 - UI en español, producto **Desvío**
 
 ## Comandos utiles
@@ -15,10 +15,10 @@
 - Test: `npm test`
 - Dev: `npm run dev`
 - Build local: `npm run build`
-- Build Pages: `GITHUB_PAGES=true npm run build` (sale `out/` con basePath `/cheapestFlights`)
+- Build Pages: `GITHUB_PAGES=true npm run build`
 
 ## Notas para el agente
-- Preferencias / arquitectura: wedge BCN one-way; no clonar Skyscanner; hidden-city opcional y etiquetado; tarifas error fuera del search
-- Cosas que NO tocar: no añadir GDS/scraper en v1; no mezclar badges de desvío legal y ciudad oculta
+- Buscador origen/destino mundial; tarifa error por fecha; extras maleta/asiento; espera en escala
+- No mezclar badges de desvío legal y ciudad oculta
+- Precios mock hasta API real
 - gstack only (ver AGENTS.md)
-- Diseño: `docs/designs/desvio-freeze-measure-demand.md` (vigente). Anterior: `docs/designs/desvio-cheaper-weird-itineraries.md`

@@ -19,7 +19,7 @@ const mono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Desvío — el vuelo raro, más barato",
   description:
-    "No es otro Skyscanner. Desvío enseña el vuelo simple, el desvío legal más barato y, si quieres, la ciudad oculta. Solo ida desde Barcelona.",
+    "Busca de cualquier aeropuerto a cualquier otro: directo, escala más barata, tarifa error y ciudad oculta. Maletas y asiento incluidos en el total.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
