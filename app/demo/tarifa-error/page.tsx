@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function ErrorFareDemo() {
   return (
     <main className="shell">
@@ -37,7 +39,7 @@ export default function ErrorFareDemo() {
         </p>
       </article>
       <p className="demo-note">
-        <a href="/">← volver al buscador</a>
+        <Link href="/">← volver al buscador</Link>
       </p>
     </main>
   );

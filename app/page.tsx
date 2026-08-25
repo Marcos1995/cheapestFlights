@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SearchBoard } from "./SearchBoard";
 
 export default function HomePage() {
@@ -20,7 +21,7 @@ export default function HomePage() {
       <p className="demo-note">
         Las tarifas error (un vuelo de 1.000 € a 200 €) no viven en el buscador: duran horas y
         piden alerta, no comparador. Hay una maqueta en{" "}
-        <a href="/demo/tarifa-error">/demo/tarifa-error</a>.
+        <Link href="/demo/tarifa-error">/demo/tarifa-error</Link>.
       </p>
     </main>
   );

@@ -1,14 +1,12 @@
 # Desvío
 
-No es un clon de Skyscanner, Kayak o Google Flights. Es un buscador de **ida desde Barcelona** que pone juntos:
+Web estática: buscador de ida desde Barcelona. No es un clon de Skyscanner.
 
-1. El vuelo **simple** (el obvio).
-2. Un **desvío legal** más barato (escala extra, aeropuerto cercano o self-transfer).
-3. Opcional: **ciudad oculta**, con avisos de contrato y maleta.
+1. El vuelo **simple**.
+2. Un **desvío legal** más barato.
+3. Opcional: **ciudad oculta**, con avisos.
 
-Las tarifas error no van en el buscador. Maqueta: `/demo/tarifa-error`.
-
-Precios de `lib/catalog.json` (mock). No hay GDS.
+Pública: https://marcos1995.github.io/cheapestFlights/
 
 ## Setup
 
@@ -18,10 +16,12 @@ npm test
 npm run dev
 ```
 
-Abre [http://localhost:3000](http://localhost:3000) y busca BCN → FCO.
+Local: [http://localhost:3000](http://localhost:3000)
+
+GitHub Pages usa `GITHUB_PAGES=true npm run build` (base `/cheapestFlights`).
 
 ## Docs
 
-- `docs/designs/desvio-cheaper-weird-itineraries.md`
-- `PROJECT.md` — contexto para agentes
-- `AGENTS.md` — gstack workflow
+- `docs/designs/desvio-freeze-measure-demand.md`
+- `PROJECT.md`
+- `AGENTS.md`

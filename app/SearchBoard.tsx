@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
+import { searchFlights } from "@/lib/engine";
 import type { Offer, SearchResponse } from "@/lib/types";
 import catalog from "@/lib/catalog.json";
 
@@ -91,7 +92,6 @@ export function SearchBoard() {
   const [date, setDate] = useState(defaultDate);
   const [maxExtraHours, setMaxExtraHours] = useState(6);
   const [referencePrice, setReferencePrice] = useState("");
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SearchResponse | null>(null);
 
@@ -100,34 +100,22 @@ export function SearchBoard() {
     return a ? `${a.city} (${dest})` : dest;
   }, [dest]);
 
-  async function onSubmit(e: FormEvent) {
+  function onSubmit(e: FormEvent) {
     e.preventDefault();
-    setLoading(true);
     setError(null);
-    try {
-      const res = await fetch("/api/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          origin: "BCN",
-          dest,
-          date,
-          maxExtraHours,
-          referencePrice: referencePrice ? Number(referencePrice) : undefined,
-        }),
-      });
-      const data = (await res.json()) as SearchResponse & { error?: string };
-      if (!res.ok) {
-        setError(data.error ?? "No se pudo buscar");
-        setResult(null);
-        return;
-      }
-      setResult(data);
-    } catch {
-      setError("Red caída. Reintenta.");
-    } finally {
-      setLoading(false);
+    if (!dest || !date) {
+      setError("Faltan destino o fecha");
+      setResult(null);
+      return;
     }
+    const data = searchFlights({
+      origin: "BCN",
+      dest,
+      date,
+      maxExtraHours,
+      referencePrice: referencePrice ? Number(referencePrice) : undefined,
+    });
+    setResult(data);
   }
 
   return (
@@ -164,9 +152,7 @@ export function SearchBoard() {
             ))}
           </select>
         </label>
-        <button type="submit" disabled={loading}>
-          {loading ? "Buscando…" : "Buscar"}
-        </button>
+        <button type="submit">Buscar</button>
       </form>
       <p className="ref">
         Opcional, el precio que viste tú:{" "}
