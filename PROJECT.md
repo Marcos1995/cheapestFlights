@@ -7,7 +7,8 @@
 
 ## Stack
 - Next.js 15 App Router, TypeScript, React 19, `output: "export"`
-- Motor ilustrativo mundial en `lib/engine.ts` + `lib/airports.ts` (cliente, sin GDS)
+- Precios vivos: Kiwi/Skypicker GraphQL (cliente, CORS `*`)
+- Enlaces: Google Flights, Skyscanner, reserva Kiwi
 - UI en español, producto **Desvío**
 
 ## Comandos utiles
@@ -18,7 +19,6 @@
 - Build Pages: `GITHUB_PAGES=true npm run build`
 
 ## Notas para el agente
-- Buscador origen/destino mundial; tarifa error por fecha; extras maleta/asiento; espera en escala
-- No mezclar badges de desvío legal y ciudad oculta
-- Precios mock hasta API real
+- No mostrar precios inventados. Si Kiwi falla, dejar los enlaces oficiales.
+- Pestaña tarifa error = comparar con la misma ruta 7 días antes (o después si esa fecha ya pasó)
 - gstack only (ver AGENTS.md)

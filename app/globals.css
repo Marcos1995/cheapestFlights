@@ -96,7 +96,7 @@ a {
 
 .search {
   display: grid;
-  grid-template-columns: 1.3fr 1.3fr 0.9fr 0.9fr auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   align-items: end;
   background: var(--paper-dark);
@@ -119,11 +119,12 @@ a {
 .search select {
   font-family: var(--font-serif), serif;
   font-size: 18px;
+  font-weight: 600;
   border: none;
   border-bottom: 1px solid var(--ink);
-  background: transparent;
+  background: #fff8ea;
   color: var(--ink);
-  padding: 4px 0;
+  padding: 6px 4px;
 }
 
 .search button {
@@ -316,31 +317,62 @@ a {
   margin: 0;
   padding: 0;
   list-style: none;
-  background: #f7edd8;
+  background: #fffef6;
   border: 1px solid var(--ink);
-  max-height: 240px;
+  max-height: 280px;
   overflow: auto;
+  box-shadow: 4px 8px 0 rgba(28, 23, 18, 0.12);
 }
 
 .airport-list button {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  column-gap: 10px;
   width: 100%;
   text-align: left;
-  background: none;
+  background: #fffef6;
   border: 0;
   border-bottom: 1px solid var(--line);
-  padding: 10px 8px;
+  padding: 10px 10px;
   font: inherit;
   cursor: pointer;
 }
 
-.airport-list button span {
-  width: 100%;
-  font-size: 12px;
-  color: var(--muted);
+.airport-list button:hover {
+  background: #fff;
+}
+
+.airport-list .iata {
+  grid-row: 1 / span 3;
+  align-self: center;
+  color: var(--stamp);
   font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.airport-list .city {
+  width: auto;
+  font-size: 17px;
+  font-weight: 700;
+  color: #120e0a;
+  font-family: var(--font-serif), serif;
+}
+
+.airport-list .airport-name,
+.airport-list .country {
+  width: auto;
+  font-size: 13px;
+  color: #3f3529;
+  font-family: var(--font-serif), serif;
+}
+
+.airport-list .country {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #5a4e3e;
 }
 
 .airport-empty {
@@ -414,6 +446,101 @@ a {
   border: 1px solid var(--ink);
   padding: 4px 8px;
   cursor: pointer;
+}
+
+.logos {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.logos img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid var(--line);
+}
+
+.carrier-names {
+  font-size: 16px;
+  color: var(--ink);
+}
+
+.tabs {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--ink);
+}
+
+.tabs button {
+  flex: 1;
+  background: var(--paper);
+  border: 0;
+  border-right: 1px solid var(--ink);
+  padding: 10px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.tabs button:last-child {
+  border-right: 0;
+}
+
+.tabs button.on {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.book-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.book {
+  display: inline-block;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  padding: 9px 12px;
+  border: 1px solid var(--ink);
+  color: var(--ink);
+  background: #fffef6;
+}
+
+.book.primary {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.book.google {
+  border-color: #1a73e8;
+  color: #174ea6;
+}
+
+.book.sky {
+  border-color: #05203c;
+  color: #05203c;
+}
+
+.book.kiwi {
+  border-color: #00a991;
+  color: #007a68;
+}
+
+.times.inbound {
+  margin-top: 0;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
 }
 
 @media (max-width: 800px) {

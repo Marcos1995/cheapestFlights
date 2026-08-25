@@ -70,8 +70,10 @@ export function AirportField({
           {hits.map((a) => (
             <li key={a.iata}>
               <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => pick(a)}>
-                <strong>{a.iata}</strong> {a.city} · {a.name}
-                <span>{a.country}</span>
+                <b className="iata">{a.iata}</b>
+                <span className="city">{a.city}</span>
+                <span className="airport-name">{a.name}</span>
+                <span className="country">{a.country}</span>
               </button>
             </li>
           ))}

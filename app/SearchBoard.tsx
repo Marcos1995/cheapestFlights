@@ -1,19 +1,40 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
 import { AirportField } from "./AirportField";
 import { getAirport, labelAirport } from "@/lib/airports";
-import { nextErrorDates, searchFlights } from "@/lib/engine";
-import type { Offer, SearchResponse } from "@/lib/types";
+import { fetchKiwiFlights, filterFlights } from "@/lib/kiwi";
+import { airlineLogo, googleFlightsUrl, kiwiSearchUrl, skyscannerUrl } from "@/lib/links";
+import {
+  addDays,
+  defaultDate,
+  errorCompare,
+  isPastDate,
+  referenceDate,
+  type Cabin,
+  type EmptyReason,
+  type LiveFlight,
+  type SearchParams,
+} from "@/lib/types";
 
-function defaultDate(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 21);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
+const AIRLINES = [
+  { code: "", name: "Todas" },
+  { code: "FR", name: "Ryanair" },
+  { code: "VY", name: "Vueling" },
+  { code: "IB", name: "Iberia" },
+  { code: "UX", name: "Air Europa" },
+  { code: "W4", name: "Wizz Air" },
+  { code: "U2", name: "easyJet" },
+  { code: "LH", name: "Lufthansa" },
+  { code: "AF", name: "Air France" },
+  { code: "KL", name: "KLM" },
+  { code: "BA", name: "British Airways" },
+  { code: "AZ", name: "ITA" },
+  { code: "TP", name: "TAP" },
+  { code: "TK", name: "Turkish Airlines" },
+  { code: "EK", name: "Emirates" },
+  { code: "QR", name: "Qatar Airways" },
+];
 
 function euro(n: number): string {
   return new Intl.NumberFormat("es-ES", {
@@ -30,66 +51,129 @@ function minutesLabel(min: number): string {
   return m ? `${h} h ${m} min` : `${h} h`;
 }
 
-const EMPTY: Record<NonNullable<SearchResponse["emptyReason"]>, string> = {
+const EMPTY: Record<EmptyReason, string> = {
   past_date: "Esa fecha ya pasó. Elige un día de hoy en adelante.",
   unknown_route: "Ese aeropuerto no está en la red. Prueba un IATA (BCN, JFK, NRT…).",
   same_airport: "Origen y destino no pueden ser el mismo.",
+  bad_return: "La vuelta tiene que ser el mismo día de la ida o después.",
 };
 
-function Card({ offer, title }: { offer: Offer; title: string }) {
-  const saved = offer.savedEur && offer.savedEur > 0 ? offer.savedEur : null;
-  const badgeClass =
-    offer.bucket === "hidden_city" ? "hard" : offer.bucket === "simple" ? "" : "save";
+function validate(p: SearchParams, now = new Date()): EmptyReason | null {
+  if (isPastDate(p.date, now)) return "past_date";
+  if (!getAirport(p.origin) || !getAirport(p.dest)) return "unknown_route";
+  if (p.origin === p.dest) return "same_airport";
+  if (p.returnDate && (isPastDate(p.returnDate, now) || p.returnDate < p.date)) return "bad_return";
+  return null;
+}
+
+function SourceLinks({ p, airlineName }: { p: SearchParams; airlineName?: string }) {
+  const g = googleFlightsUrl({ ...p, airlineName });
+  const s = skyscannerUrl(p);
+  const k = kiwiSearchUrl(p);
   return (
-    <article className={`card ${offer.bucket}`}>
+    <div className="book-row">
+      <a className="book google" href={g} target="_blank" rel="noopener noreferrer">
+        Ver en Google Flights
+      </a>
+      <a className="book sky" href={s} target="_blank" rel="noopener noreferrer">
+        Ver en Skyscanner
+      </a>
+      <a className="book kiwi" href={k} target="_blank" rel="noopener noreferrer">
+        Buscar en Kiwi
+      </a>
+    </div>
+  );
+}
+
+function FlightCard({
+  flight,
+  params,
+  tag,
+  saved,
+}: {
+  flight: LiveFlight;
+  params: SearchParams;
+  tag: string;
+  saved?: number | null;
+}) {
+  const names = flight.airlines.map((a) => a.name).join(" + ");
+  return (
+    <article className={`card ${flight.stopCount ? "detour" : "simple"}`}>
       <div className="card-top">
         <div>
-          <span className={`badge ${badgeClass}`}>{title}</span>
+          <span className={`badge ${flight.stopCount ? "save" : ""}`}>{tag}</span>
+          <div className="logos">
+            {flight.airlines.map((a) => (
+              <img
+                key={a.code}
+                src={airlineLogo(a.code)}
+                alt=""
+                width={28}
+                height={28}
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).style.display = "none";
+                }}
+              />
+            ))}
+            <strong className="carrier-names">{names}</strong>
+          </div>
           <div className="times">
             <div>
-              <b>{offer.depart}</b>
-              <small>sale</small>
+              <b>{flight.outbound.depart}</b>
+              <small>
+                sale {params.origin} → {params.dest}
+              </small>
             </div>
             <div>
-              <b>{offer.arrive}</b>
-              <small>llega · {minutesLabel(offer.durationMin)}</small>
+              <b>{flight.outbound.arrive}</b>
+              <small>
+                llega · {minutesLabel(flight.outbound.durationMin)}
+                {flight.outbound.stops.length ? ` · escala ${flight.outbound.stops.join(", ")}` : " · directo"}
+              </small>
             </div>
           </div>
+          {flight.inbound && (
+            <div className="times inbound">
+              <div>
+                <b>{flight.inbound.depart}</b>
+                <small>
+                  vuelta {params.dest} → {params.origin}
+                </small>
+              </div>
+              <div>
+                <b>{flight.inbound.arrive}</b>
+                <small>llega · {minutesLabel(flight.inbound.durationMin)}</small>
+              </div>
+            </div>
+          )}
         </div>
         <div className="price">
-          {euro(offer.priceEur)}
-          {saved ? (
-            <span>ahorras {euro(saved)} vs el directo estándar</span>
-          ) : offer.bucket === "simple" ? (
-            <span>precio de referencia (directo)</span>
-          ) : (
-            <span>no mejora el directo</span>
-          )}
+          {euro(flight.priceEur)}
+          <span>{saved && saved > 0 ? `ahorras ${euro(saved)} vs la semana de referencia` : "precio real · Kiwi.com"}</span>
         </div>
       </div>
-      <p className="explain">{offer.explanation}</p>
-      <div className="meta">
-        {offer.airlines.join(" + ")}
-        {offer.stops.length ? ` · escala ${offer.stops.join(", ")}` : " · sin escalas"}
-        {offer.layoverMinutes > 0 ? ` · espera ${minutesLabel(offer.layoverMinutes)}` : ""}
-        {offer.kind === "hidden_city" && offer.ticketedDest ? ` · billete hasta ${offer.ticketedDest}` : ""}
-        {" · "}billete {euro(offer.baseEur)}
-        {offer.extrasEur > 0 ? ` + extras ${euro(offer.extrasEur)}` : ""}
-        {" · ilustrativo"}
+      <p className="explain">
+        {flight.stopCount
+          ? `Con escala (${minutesLabel(flight.layoverMinutes)} de espera). Precio vivo de Kiwi, no un ejemplo.`
+          : "Directo. Precio vivo de Kiwi, no un ejemplo."}
+        {flight.selfTransfer ? " Puede ser auto-transferencia (más de una aerolínea)." : ""}
+      </p>
+      <div className="book-row">
+        <a className="book primary" href={flight.bookingUrl} target="_blank" rel="noopener noreferrer">
+          Reservar este precio
+        </a>
+        <a
+          className="book google"
+          href={googleFlightsUrl({ ...params, airlineName: flight.airlines[0]?.name })}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Comprobar en Google Flights
+        </a>
+        <a className="book sky" href={skyscannerUrl(params)} target="_blank" rel="noopener noreferrer">
+          Comprobar en Skyscanner
+        </a>
       </div>
-      {offer.riskFlags.length > 0 && (
-        <div className="flags">
-          {offer.riskFlags.includes("self_transfer") && (
-            <span className="badge">dos billetes · sin protección de enlace</span>
-          )}
-          {offer.riskFlags.includes("hidden_city") && (
-            <span className="badge hard">contrato de la aerolínea en contra</span>
-          )}
-          {offer.riskFlags.includes("checked_bag_hidden_city") && (
-            <span className="badge hard">maleta facturada seguiría hasta el destino del billete</span>
-          )}
-        </div>
-      )}
     </article>
   );
 }
@@ -97,63 +181,104 @@ function Card({ offer, title }: { offer: Offer; title: string }) {
 export function SearchBoard() {
   const [origin, setOrigin] = useState("BCN");
   const [dest, setDest] = useState("FCO");
+  const [roundTrip, setRoundTrip] = useState(false);
   const [date, setDate] = useState(defaultDate);
+  const [returnDate, setReturnDate] = useState(() => defaultDate(28));
+  const [adults, setAdults] = useState(1);
+  const [cabin, setCabin] = useState<Cabin>("ECONOMY");
   const [maxLayoverHours, setMaxLayoverHours] = useState(4);
   const [bags, setBags] = useState(0);
-  const [bagKg, setBagKg] = useState<23 | 32>(23);
-  const [seat, setSeat] = useState(false);
+  const [airline, setAirline] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<SearchResponse | null>(null);
+  const [empty, setEmpty] = useState<EmptyReason | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState<"flights" | "error">("flights");
+  const [params, setParams] = useState<SearchParams | null>(null);
+  const [raw, setRaw] = useState<LiveFlight[]>([]);
+  const [rawRef, setRawRef] = useState<LiveFlight[]>([]);
+  const [refMeta, setRefMeta] = useState<{ date: string; label: string } | null>(null);
+  const req = useRef(0);
 
   const destName = useMemo(() => {
     const a = getAirport(dest);
     return a ? labelAirport(a) : dest;
   }, [dest]);
 
-  const errorHints = useMemo(() => nextErrorDates(origin, dest, date, 24).slice(0, 4), [origin, dest, date]);
+  const originName = useMemo(() => {
+    const a = getAirport(origin);
+    return a ? labelAirport(a) : origin;
+  }, [origin]);
 
-  function run(nextDate = date) {
+  const current: SearchParams = {
+    origin,
+    dest,
+    date,
+    returnDate: roundTrip ? returnDate : null,
+    adults,
+    cabin,
+    bags,
+    maxLayoverHours,
+    airline,
+  };
+
+  const flights = useMemo(
+    () => filterFlights(raw, maxLayoverHours, airline),
+    [raw, maxLayoverHours, airline],
+  );
+  const refFlights = useMemo(
+    () => filterFlights(rawRef, maxLayoverHours, airline),
+    [rawRef, maxLayoverHours, airline],
+  );
+  const cheapest = flights[0] ?? null;
+  const cheapestDirect = flights.find((f) => f.stopCount === 0) ?? null;
+  const cheapestStop = flights.find((f) => f.stopCount > 0) ?? null;
+  const stopSaves =
+    cheapestDirect && cheapestStop && cheapestStop.priceEur < cheapestDirect.priceEur
+      ? cheapestDirect.priceEur - cheapestStop.priceEur
+      : 0;
+  const cmp = errorCompare(cheapest?.priceEur ?? null, refFlights[0]?.priceEur ?? null);
+
+  async function run(next = current) {
     setError(null);
-    if (!origin || !dest) {
-      setError("Elige origen y destino");
-      setResult(null);
+    const reason = validate(next);
+    setEmpty(reason);
+    setParams(next);
+    if (reason) {
+      setRaw([]);
+      setRawRef([]);
       return;
     }
-    setDate(nextDate);
-    setResult(
-      searchFlights({
-        origin,
-        dest,
-        date: nextDate,
-        maxLayoverHours,
-        bags,
-        bagKg,
-        seat,
-      }),
-    );
+    const id = ++req.current;
+    setLoading(true);
+    const ref = referenceDate(next.date);
+    setRefMeta(ref);
+    try {
+      const [nowList, weekList] = await Promise.all([
+        fetchKiwiFlights(next),
+        fetchKiwiFlights({
+          ...next,
+          date: ref.date,
+          returnDate: next.returnDate ? shiftReturn(next.date, next.returnDate, ref.date) : null,
+        }).catch(() => [] as LiveFlight[]),
+      ]);
+      if (id !== req.current) return;
+      setRaw(nowList);
+      setRawRef(weekList);
+      setTab("flights");
+    } catch (e) {
+      if (id !== req.current) return;
+      setRaw([]);
+      setRawRef([]);
+      setError(e instanceof Error ? e.message : "No se pudo leer Kiwi ahora mismo.");
+    } finally {
+      if (id === req.current) setLoading(false);
+    }
   }
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
-    run(date);
+    void run();
   }
-
-  useEffect(() => {
-    if (!result) return;
-    setResult(
-      searchFlights({
-        origin,
-        dest,
-        date,
-        maxLayoverHours,
-        bags,
-        bagKg,
-        seat,
-      }),
-    );
-    // Recalculate extras/layover on the last searched route without forcing origin edits.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [maxLayoverHours, bags, bagKg, seat]);
 
   return (
     <>
@@ -161,15 +286,47 @@ export function SearchBoard() {
         <AirportField label="Origen" value={origin} onChange={setOrigin} />
         <AirportField label="Destino" value={dest} onChange={setDest} />
         <label>
+          Tipo
+          <select
+            value={roundTrip ? "rt" : "ow"}
+            onChange={(e) => setRoundTrip(e.target.value === "rt")}
+          >
+            <option value="ow">Solo ida</option>
+            <option value="rt">Ida y vuelta</option>
+          </select>
+        </label>
+        <label>
           Ida
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
         </label>
+        {roundTrip && (
+          <label>
+            Vuelta
+            <input type="date" value={returnDate} onChange={(e) => setReturnDate(e.target.value)} required />
+          </label>
+        )}
         <label>
-          Espera máx. en escala
-          <select
-            value={String(maxLayoverHours)}
-            onChange={(e) => setMaxLayoverHours(Number(e.target.value))}
-          >
+          Pasajeros
+          <select value={String(adults)} onChange={(e) => setAdults(Number(e.target.value))}>
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+              <option key={n} value={n}>
+                {n} adulto{n === 1 ? "" : "s"}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Clase
+          <select value={cabin} onChange={(e) => setCabin(e.target.value as Cabin)}>
+            <option value="ECONOMY">Turista</option>
+            <option value="PREMIUM_ECONOMY">Turista premium</option>
+            <option value="BUSINESS">Business</option>
+            <option value="FIRST">Primera</option>
+          </select>
+        </label>
+        <label>
+          Espera máx. escala
+          <select value={String(maxLayoverHours)} onChange={(e) => setMaxLayoverHours(Number(e.target.value))}>
             {[1, 2, 3, 4, 6, 8, 12].map((h) => (
               <option key={h} value={h}>
                 {h} h
@@ -177,10 +334,16 @@ export function SearchBoard() {
             ))}
           </select>
         </label>
-        <button type="submit">Buscar</button>
-      </form>
-
-      <div className="extras">
+        <label>
+          Aerolínea
+          <select value={airline} onChange={(e) => setAirline(e.target.value)}>
+            {AIRLINES.map((a) => (
+              <option key={a.code || "all"} value={a.code}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+        </label>
         <label>
           Maletas facturadas
           <select value={String(bags)} onChange={(e) => setBags(Number(e.target.value))}>
@@ -191,88 +354,127 @@ export function SearchBoard() {
             ))}
           </select>
         </label>
-        <label>
-          Kg por maleta
-          <select value={String(bagKg)} onChange={(e) => setBagKg(Number(e.target.value) === 32 ? 32 : 23)}>
-            <option value={23}>23 kg</option>
-            <option value={32}>32 kg</option>
-          </select>
-        </label>
-        <label className="check">
-          <input type="checkbox" checked={seat} onChange={(e) => setSeat(e.target.checked)} />
-          Elegir asiento (+24 €)
-        </label>
-      </div>
+        <button type="submit" disabled={loading}>
+          {loading ? "Buscando…" : "Buscar"}
+        </button>
+      </form>
       <p className="ref">
-        Maleta 23 kg = 32 € · 32 kg = 48 €. Sin maleta facturada la ciudad oculta puede aparecer. Con
-        maleta, no: el equipaje iría al destino del billete.
+        Precios reales de Kiwi.com. Cada tarjeta abre la reserva o el mismo trayecto en Google Flights y
+        Skyscanner. Los kilos exactos se eligen en el checkout.
       </p>
-      {error && <p className="error">{error}</p>}
-
-      {result && result.emptyReason && !result.simple && (
-        <p className="empty">{EMPTY[result.emptyReason]}</p>
+      {error && (
+        <p className="error">
+          {error} Puedes abrir igual los buscadores oficiales abajo.
+        </p>
       )}
+      {empty && <p className="empty">{EMPTY[empty]}</p>}
 
-      {result?.simple && (
+      {params && !empty && (
         <div className="results">
-          {result.hasErrorNow ? (
-            <p className="banner error-now">
-              En esta fecha el modelo marca una <strong>tarifa error</strong> en {result.origin}–
-              {result.dest}: el directo sale {euro(result.errorFare?.baseEur ?? 0)} en vez de{" "}
-              {euro(result.simple.baseEur)}.
-            </p>
-          ) : (
-            <p className="banner">
-              No hay tarifa error en {date} para esta ruta.
-              {errorHints.length > 0 && (
-                <>
-                  {" "}
-                  Fechas con glitch ilustrativo:{" "}
-                  {errorHints.map((d) => (
-                    <button key={d} type="button" className="date-chip" onClick={() => run(d)}>
-                      {d}
-                    </button>
-                  ))}
-                </>
+          <SourceLinks p={params} />
+          <div className="tabs">
+            <button type="button" className={tab === "flights" ? "on" : ""} onClick={() => setTab("flights")}>
+              Vuelos
+            </button>
+            <button type="button" className={tab === "error" ? "on" : ""} onClick={() => setTab("error")}>
+              Tarifa error
+              {cmp.looksLikeError ? " · hay una" : ""}
+            </button>
+          </div>
+
+          {loading && <p className="banner">Leyendo precios en tiempo real…</p>}
+
+          {tab === "flights" && !loading && (
+            <>
+              {stopSaves > 0 ? (
+                <p className="banner save">
+                  Sí ahorras frente al directo: {euro(stopSaves)} con escala hacia {destName}.
+                </p>
+              ) : cheapestDirect ? (
+                <p className="banner">
+                  En {originName} → {destName} el directo es la opción más barata dentro de {maxLayoverHours} h
+                  de espera.
+                </p>
+              ) : null}
+              {flights.length === 0 ? (
+                <p className="empty">Kiwi no devolvió vuelos para esos filtros. Prueba otra fecha o abre Google Flights.</p>
+              ) : (
+                flights.slice(0, 8).map((f, i) => (
+                  <FlightCard
+                    key={f.id}
+                    flight={f}
+                    params={params}
+                    tag={i === 0 ? "más barato ahora" : f.stopCount ? "con escala" : "directo"}
+                    saved={i === 0 ? cmp.savedEur : null}
+                  />
+                ))
               )}
-            </p>
+            </>
           )}
 
-          {result.detourBeatsSimple ? (
-            <p className="banner save">
-              Sí ahorras frente al directo estándar: {euro(result.detour?.savedEur ?? 0)} con una
-              escala (espera {minutesLabel(result.detour?.layoverMinutes ?? 0)}).
-            </p>
-          ) : (
-            <p className="banner">
-              En {result.origin}→{result.dest} el directo gana dentro de {maxLayoverHours} h de espera.
-              Sube el tiempo de escala o prueba otra fecha.
-            </p>
+          {tab === "error" && !loading && (
+            <>
+              {cmp.looksLikeError && cheapest ? (
+                <p className="banner error-now">
+                  Esta fecha sale {euro(cheapest.priceEur)} frente a {euro(refFlights[0]?.priceEur ?? 0)} {refMeta?.label}.
+                  Ahorras {euro(cmp.savedEur ?? 0)} respecto a ese vuelo “normal” de la semana de referencia.
+                </p>
+              ) : (
+                <p className="banner">
+                  No parece una tarifa error: no hay un descuento fuerte (25 % y ≥ 25 €) frente a {refMeta?.label ?? "la semana de referencia"}.
+                  {cheapest && refFlights[0]
+                    ? ` Ahora ${euro(cheapest.priceEur)} · referencia ${euro(refFlights[0].priceEur)}.`
+                    : ""}
+                </p>
+              )}
+              {cheapest && (
+                <FlightCard
+                  flight={cheapest}
+                  params={params}
+                  tag={cmp.looksLikeError ? "posible tarifa error" : "más barato de esta fecha"}
+                  saved={cmp.savedEur}
+                />
+              )}
+              {refFlights[0] && refMeta && (
+                <FlightCard
+                  flight={refFlights[0]}
+                  params={{
+                    ...params,
+                    date: refMeta.date,
+                    returnDate: params.returnDate
+                      ? shiftReturn(params.date, params.returnDate, refMeta.date)
+                      : null,
+                  }}
+                  tag={`vuelo de referencia · ${refMeta.label}`}
+                />
+              )}
+              <p className="ref">
+                Comparación hecha con precios reales de Kiwi, misma ruta y mismos pasajeros. Ábrelo en Google
+                Flights para ver el gráfico de precios de Google.
+              </p>
+              <SourceLinks p={params} />
+              {refMeta && (
+                <SourceLinks
+                  p={{
+                    ...params,
+                    date: refMeta.date,
+                    returnDate: params.returnDate
+                      ? shiftReturn(params.date, params.returnDate, refMeta.date)
+                      : null,
+                  }}
+                />
+              )}
+            </>
           )}
-
-          <Card offer={result.simple} title="Directo estándar" />
-          {result.errorFare ? <Card offer={result.errorFare} title="Tarifa error" /> : null}
-          {result.detour ? (
-            <Card offer={result.detour} title="Más barato con escala" />
-          ) : (
-            <p className="empty">
-              No hay una escala más barata hacia {destName} con {maxLayoverHours} h de espera.
-            </p>
-          )}
-          {result.hiddenCity ? (
-            <div className="hidden-wrap">
-              <details>
-                <summary>Ciudad oculta — más barato, contrato en contra. Ábrelo si aceptas el riesgo.</summary>
-                <div style={{ marginTop: 12 }}>
-                  <Card offer={result.hiddenCity} title="Ciudad oculta" />
-                </div>
-              </details>
-            </div>
-          ) : bags > 0 ? (
-            <p className="meta">Ciudad oculta oculta: llevas maleta facturada.</p>
-          ) : null}
         </div>
       )}
     </>
   );
+}
+
+function shiftReturn(oldOut: string, oldRet: string, newOut: string): string {
+  const [y1, m1, d1] = oldOut.split("-").map(Number);
+  const [y2, m2, d2] = oldRet.split("-").map(Number);
+  const days = Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000);
+  return addDays(newOut, days);
 }

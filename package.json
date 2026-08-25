@@ -1,12 +1,12 @@
 {
   "name": "desvio",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "tsx --test lib/engine.test.ts"
+    "test": "tsx --test lib/links.test.ts"
   },
   "dependencies": {
     "next": "^15.5.2",

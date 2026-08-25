@@ -19,7 +19,7 @@ const mono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Desvío — el vuelo raro, más barato",
   description:
-    "Busca de cualquier aeropuerto a cualquier otro: directo, escala más barata, tarifa error y ciudad oculta. Maletas y asiento incluidos en el total.",
+    "Busca vuelos reales (ida o ida y vuelta): precio vivo, enlace de reserva, Google Flights y Skyscanner.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

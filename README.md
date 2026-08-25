@@ -1,12 +1,10 @@
 # Desvío
 
-Web estática: busca de **cualquier aeropuerto a cualquier otro** (red de hubs mundiales). No es un clon de Skyscanner.
+Web estática: busca **ida o ida y vuelta** entre aeropuertos reales.
 
-1. El vuelo **directo estándar**.
-2. Una **escala más barata** si cabe en las horas de espera que eliges.
-3. **Tarifa error** si el modelo la marca en esa fecha (ilustrativo, no GDS).
-4. Opcional: **ciudad oculta**, con avisos. Solo sin maleta facturada.
-5. **Maletas** (kilos) y **asiento** suman al total, como extras de Google Flights.
+1. Precio **vivo** (Kiwi.com) y botón de reserva.
+2. El mismo trayecto en **Google Flights** y **Skyscanner**.
+3. Pestaña **tarifa error**: compara con la misma ruta una semana antes.
 
 Pública: https://marcos1995.github.io/cheapestFlights/
 
