@@ -22,5 +22,6 @@
 - No mostrar precios inventados. Si Kiwi falla, dejar los enlaces oficiales.
 - Origen/destino ANY = Kiwi `anywhere` en cualquiera de los dos
 - Orden: tarifa error → ciudad oculta → resto
-- Si no hay error hoy, pistas de fechas +2/+3/+5/+7/+10/+15
+- Fechas: un día, rango desde–hasta, o un mes entero
+- Si no hay error hoy (día concreto), pistas de fechas +2/+3/+5/+7/+10/+15
 - gstack only (ver AGENTS.md)

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { googleFlightsUrl, kiwiBookingUrl, kiwiSearchUrl, skyscannerUrl } from "./links";
 import { parseItineraries } from "./kiwi";
-import { addDays, errorCompare, isPastDate, kiwiPlaceId, referenceDate, skyDate } from "./types";
+import { addDays, errorCompare, isPastDate, kiwiPlaceId, monthBounds, referenceDate, referenceWindow, skyDate } from "./types";
 
 test("kiwiPlaceId maps ANY to anywhere", () => {
   assert.equal(kiwiPlaceId("BCN"), "BCN");
@@ -93,6 +93,7 @@ test("parser reads a live Kiwi one-way payload", () => {
   assert.equal(flights.length, 1);
   assert.equal(flights[0].priceEur, 27);
   assert.equal(flights[0].outbound.depart, "20:15");
+  assert.equal(flights[0].outbound.date, "2026-09-15");
   assert.equal(flights[0].stopCount, 0);
   assert.equal(flights[0].airlines[0].code, "FR");
   assert.equal(flights[0].ticketedDest, "FCO");
@@ -115,4 +116,28 @@ test("anywhere origin and dest links", () => {
   const both = { origin: "ANY", dest: "ANY", date: "2026-09-15", adults: 1, cabin: "ECONOMY" as const };
   assert.match(decodeURIComponent(googleFlightsUrl(both)), /Vuelos baratos/);
   assert.match(kiwiSearchUrl(both), /\/anywhere\/anywhere\/2026-09-15/);
+});
+
+test("flexible dates use a from-until window", () => {
+  const p = {
+    origin: "BCN",
+    dest: "FCO",
+    date: "2026-09-01",
+    dateTo: "2026-09-30",
+    adults: 1,
+    cabin: "ECONOMY" as const,
+  };
+  assert.match(decodeURIComponent(googleFlightsUrl(p)), /entre 2026-09-01 y 2026-09-30/);
+  assert.match(skyscannerUrl(p), /\/bcn\/fco\/2609\//);
+  assert.match(kiwiSearchUrl(p), /\/2026-09-01_2026-09-30\/no-return/);
+});
+
+test("monthBounds clamps the current month and rejects past months", () => {
+  const now = new Date(2026, 7, 25);
+  assert.deepEqual(monthBounds("2026-08", now), { start: "2026-08-25", end: "2026-08-31" });
+  assert.equal(monthBounds("2026-07", now), null);
+  assert.deepEqual(monthBounds("2026-09", now), { start: "2026-09-01", end: "2026-09-30" });
+  const win = referenceWindow("2026-09-01", "2026-09-30", now);
+  assert.equal(win.date, "2026-08-25");
+  assert.equal(win.dateTo, "2026-09-23");
 });

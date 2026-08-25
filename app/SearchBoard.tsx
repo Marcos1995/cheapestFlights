@@ -9,15 +9,21 @@ import { altOffsetsFor, dateHints, rankFlights } from "@/lib/rank";
 import {
   addDays,
   defaultDate,
+  defaultMonth,
   isAnywhere,
+  isFlexible,
   isPastDate,
-  referenceDate,
+  monthBounds,
+  referenceWindow,
   shiftReturn,
+  upcomingMonths,
   type Cabin,
   type EmptyReason,
   type LiveFlight,
   type SearchParams,
 } from "@/lib/types";
+
+type DateMode = "day" | "range" | "month";
 
 const AIRLINES = [
   { code: "", name: "Todas" },
@@ -58,22 +64,52 @@ const EMPTY: Record<EmptyReason, string> = {
   unknown_route: "Ese aeropuerto no está en la red. Prueba un IATA (BCN, JFK, NRT…).",
   same_airport: "Origen y destino no pueden ser el mismo.",
   bad_return: "La vuelta tiene que ser el mismo día de la ida o después.",
+  bad_range: "Hasta tiene que ser el mismo día de Desde o después.",
 };
 
+function resolvedWhen(
+  mode: DateMode,
+  date: string,
+  dateTo: string,
+  month: string,
+): { date: string; dateTo: string } {
+  if (mode === "day") return { date, dateTo: date };
+  if (mode === "month") {
+    const bounds = monthBounds(month);
+    if (!bounds) return { date, dateTo: date };
+    return { date: bounds.start, dateTo: bounds.end };
+  }
+  return { date, dateTo: dateTo < date ? date : dateTo };
+}
+
+function dayLabel(iso: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Intl.DateTimeFormat("es-ES", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  }).format(new Date(y, m - 1, d));
+}
+
 function validate(p: SearchParams, now = new Date()): EmptyReason | null {
+  if (!p.dateTo || p.dateTo < p.date) return "bad_range";
   if (isPastDate(p.date, now)) return "past_date";
   if (!isAnywhere(p.origin) && !getAirport(p.origin)) return "unknown_route";
   if (!isAnywhere(p.dest) && !getAirport(p.dest)) return "unknown_route";
   if (!isAnywhere(p.origin) && !isAnywhere(p.dest) && p.origin === p.dest) return "same_airport";
-  if (p.returnDate && (isPastDate(p.returnDate, now) || p.returnDate < p.date)) return "bad_return";
+  if (p.returnDate && (isPastDate(p.returnDate, now) || p.returnDate < p.dateTo)) return "bad_return";
   return null;
 }
 
 function pinParams(params: SearchParams, flight: LiveFlight): SearchParams {
+  const day = flight.outbound.date || params.date;
   return {
     ...params,
     origin: isAnywhere(params.origin) ? flight.outbound.from : params.origin,
     dest: isAnywhere(params.dest) ? flight.ticketedDest : params.dest,
+    date: day,
+    dateTo: day,
   };
 }
 
@@ -137,6 +173,7 @@ function FlightCard({
             <div>
               <b>{flight.outbound.depart}</b>
               <small>
+                {flight.outbound.date ? `${dayLabel(flight.outbound.date)} · ` : ""}
                 sale {pinned.origin} → {pinned.dest}
               </small>
             </div>
@@ -152,7 +189,7 @@ function FlightCard({
             <div className="times inbound">
               <div>
                 <b>{flight.inbound.depart}</b>
-                <small>vuelta</small>
+                <small>{flight.inbound.date ? `${dayLabel(flight.inbound.date)} · ` : ""}vuelta</small>
               </div>
               <div>
                 <b>{flight.inbound.arrive}</b>
@@ -207,7 +244,10 @@ export function SearchBoard() {
   const [origin, setOrigin] = useState("BCN");
   const [dest, setDest] = useState("FCO");
   const [roundTrip, setRoundTrip] = useState(false);
+  const [dateMode, setDateMode] = useState<DateMode>("day");
   const [date, setDate] = useState(defaultDate);
+  const [dateTo, setDateTo] = useState(defaultDate);
+  const [month, setMonth] = useState(defaultMonth);
   const [returnDate, setReturnDate] = useState(() => defaultDate(28));
   const [adults, setAdults] = useState(1);
   const [cabin, setCabin] = useState<Cabin>("ECONOMY");
@@ -222,8 +262,9 @@ export function SearchBoard() {
   const [raw, setRaw] = useState<LiveFlight[]>([]);
   const [rawRef, setRawRef] = useState<LiveFlight[]>([]);
   const [hints, setHints] = useState<{ date: string; days: number; price: number; savedEur: number }[]>([]);
-  const [refMeta, setRefMeta] = useState<{ date: string; label: string } | null>(null);
+  const [refMeta, setRefMeta] = useState<{ date: string; dateTo: string; label: string } | null>(null);
   const req = useRef(0);
+  const months = useMemo(() => upcomingMonths(), []);
 
   const destName = useMemo(() => {
     if (isAnywhere(dest)) return "cualquier destino";
@@ -237,10 +278,12 @@ export function SearchBoard() {
     return a ? labelAirport(a) : origin;
   }, [origin]);
 
+  const when = resolvedWhen(dateMode, date, dateTo, month);
   const current: SearchParams = {
     origin,
     dest,
-    date,
+    date: when.date,
+    dateTo: when.dateTo,
     returnDate: roundTrip ? returnDate : null,
     adults,
     cabin,
@@ -282,7 +325,8 @@ export function SearchBoard() {
     }
     const id = ++req.current;
     setLoading(true);
-    const ref = referenceDate(next.date);
+    const flexible = isFlexible(next.date, next.dateTo);
+    const ref = referenceWindow(next.date, next.dateTo);
     setRefMeta(ref);
     try {
       const [nowList, weekList, altLists] = await Promise.all([
@@ -290,16 +334,18 @@ export function SearchBoard() {
         fetchKiwiFlights({
           ...next,
           date: ref.date,
+          dateTo: ref.dateTo,
           returnDate: next.returnDate ? shiftReturn(next.date, next.returnDate, ref.date) : null,
         }).catch(() => [] as LiveFlight[]),
         Promise.all(
-          altOffsetsFor(next.origin, next.dest).map(async (days) => {
+          altOffsetsFor(next.origin, next.dest, flexible).map(async (days) => {
             const date = addDays(next.date, days);
             if (isPastDate(date)) return { date, days, cheapest: null as number | null };
             try {
               const list = await fetchKiwiFlights({
                 ...next,
                 date,
+                dateTo: date,
                 returnDate: next.returnDate ? shiftReturn(next.date, next.returnDate, date) : null,
                 limit: 6,
               });
@@ -341,16 +387,96 @@ export function SearchBoard() {
           Tipo
           <select
             value={roundTrip ? "rt" : "ow"}
-            onChange={(e) => setRoundTrip(e.target.value === "rt")}
+            onChange={(e) => {
+              const rt = e.target.value === "rt";
+              setRoundTrip(rt);
+              if (rt && returnDate < when.dateTo) setReturnDate(addDays(when.dateTo, 7));
+            }}
           >
             <option value="ow">Solo ida</option>
             <option value="rt">Ida y vuelta</option>
           </select>
         </label>
         <label>
-          Ida
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+          Cuándo
+          <select
+            value={dateMode}
+            onChange={(e) => {
+              const mode = e.target.value as DateMode;
+              setDateMode(mode);
+              if (mode === "day") setDateTo(date);
+              if (mode === "range") {
+                const end = !dateTo || dateTo === date ? addDays(date, 6) : dateTo;
+                setDateTo(end);
+                if (roundTrip && returnDate < end) setReturnDate(addDays(end, 7));
+              }
+              if (mode === "month") {
+                const fromDate = date.slice(0, 7);
+                const nextMonth = months.some((m) => m.value === fromDate) ? fromDate : defaultMonth();
+                setMonth(nextMonth);
+                const bounds = monthBounds(nextMonth);
+                if (bounds) {
+                  setDate(bounds.start);
+                  setDateTo(bounds.end);
+                  if (roundTrip && returnDate < bounds.end) setReturnDate(addDays(bounds.end, 7));
+                }
+              }
+            }}
+          >
+            <option value="day">Un día</option>
+            <option value="range">Fechas flexibles</option>
+            <option value="month">Un mes</option>
+          </select>
         </label>
+        {dateMode === "month" ? (
+          <label>
+            Mes
+            <select
+              value={month}
+              onChange={(e) => {
+                const value = e.target.value;
+                setMonth(value);
+                const bounds = monthBounds(value);
+                if (bounds) {
+                  setDate(bounds.start);
+                  setDateTo(bounds.end);
+                  if (roundTrip && returnDate < bounds.end) setReturnDate(addDays(bounds.end, 7));
+                }
+              }}
+            >
+              {months.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : dateMode === "range" ? (
+          <>
+            <label>
+              Desde
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+            </label>
+            <label>
+              Hasta
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => {
+                  const end = e.target.value;
+                  setDateTo(end);
+                  if (roundTrip && returnDate < end) setReturnDate(addDays(end, 7));
+                }}
+                required
+              />
+            </label>
+          </>
+        ) : (
+          <label>
+            Ida
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+          </label>
+        )}
         {roundTrip && (
           <label>
             Vuelta
@@ -438,7 +564,7 @@ export function SearchBoard() {
 
           {!loading && ranked.error.length === 0 && (
             <p className="banner">
-              No hay tarifas error para esta fecha
+              No hay tarifas error {params && isFlexible(params.date, params.dateTo) ? "en esta ventana" : "para esta fecha"}
               {refFlights[0] && cheapest ? ` (ahora ${euro(cheapest.priceEur)} · normal ${euro(refFlights[0].priceEur)})` : ""}.
               {hints.length > 0 ? " Sí las hay en otras fechas:" : ""}
               {hints.map((h) => (
@@ -447,11 +573,14 @@ export function SearchBoard() {
                   type="button"
                   className="date-chip"
                   onClick={() => {
+                    setDateMode("day");
                     setDate(h.date);
+                    setDateTo(h.date);
                     if (params?.returnDate) setReturnDate(shiftReturn(params.date, params.returnDate, h.date));
                     void run({
                       ...current,
                       date: h.date,
+                      dateTo: h.date,
                       returnDate: current.returnDate
                         ? shiftReturn(current.date, current.returnDate, h.date)
                         : null,
@@ -540,7 +669,7 @@ export function SearchBoard() {
                 </p>
               ) : (
                 <p className="banner">
-                  No hay tarifas error para esta fecha.
+                  No hay tarifas error {params && isFlexible(params.date, params.dateTo) ? "en esta ventana" : "para esta fecha"}.
                   {hints.length > 0 ? " Revisa estas otras:" : " Tampoco aparecen en +2 a +15 días con el mismo criterio."}
                 </p>
               )}
@@ -550,10 +679,13 @@ export function SearchBoard() {
                   type="button"
                   className="date-chip"
                   onClick={() => {
+                    setDateMode("day");
                     setDate(h.date);
+                    setDateTo(h.date);
                     void run({
                       ...current,
                       date: h.date,
+                      dateTo: h.date,
                       returnDate: current.returnDate
                         ? shiftReturn(current.date, current.returnDate, h.date)
                         : null,
@@ -579,6 +711,7 @@ export function SearchBoard() {
                   params={{
                     ...params,
                     date: refMeta.date,
+                    dateTo: refMeta.dateTo,
                     returnDate: params.returnDate
                       ? shiftReturn(params.date, params.returnDate, refMeta.date)
                       : null,

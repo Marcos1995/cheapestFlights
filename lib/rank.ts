@@ -108,8 +108,8 @@ export function rankFlights(
   return { error, hidden, normal };
 }
 
-export function altOffsetsFor(origin: string, dest: string): readonly number[] {
-  if (isAnywhere(origin)) return [];
+export function altOffsetsFor(origin: string, dest: string, flexible = false): readonly number[] {
+  if (flexible || isAnywhere(origin)) return [];
   return isAnywhere(dest) ? ANY_ALT_OFFSETS : ALT_OFFSETS;
 }
 

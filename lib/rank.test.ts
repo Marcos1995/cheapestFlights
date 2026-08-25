@@ -22,6 +22,7 @@ function flight(partial: Partial<LiveFlight> & Pick<LiveFlight, "id" | "priceEur
       stops: [],
       layoverMinutes: 0,
       airlines: [{ code: "FR", name: "Ryanair" }],
+      date: "2026-09-15",
     },
     inbound: null,
     selfTransfer: false,
@@ -49,6 +50,7 @@ test("error fares rank ahead of hidden city and normal, biggest cut first", () =
         stops: ["FCO"],
         layoverMinutes: 80,
         airlines: [{ code: "IB", name: "Iberia" }],
+        date: "2026-09-15",
       },
     }),
   ];
@@ -78,10 +80,11 @@ test("hidden city stays off with checked bags", () => {
       arrive: "14:00",
       durationMin: 360,
       stops: ["FCO"],
-      layoverMinutes: 80,
-      airlines: [{ code: "IB", name: "Iberia" }],
-    },
-  });
+        layoverMinutes: 80,
+        airlines: [{ code: "IB", name: "Iberia" }],
+        date: "2026-09-15",
+      },
+    });
   const map = new Map([["BCN-FCO", 200]]);
   assert.equal(hiddenCityOf(hid, "FCO", 1, map), null);
   assert.ok(hiddenCityOf(hid, "FCO", 0, map));
@@ -104,6 +107,7 @@ test("error fares compare the same origin-destination pair", () => {
         stops: [],
         layoverMinutes: 0,
         airlines: [{ code: "AA", name: "American" }],
+        date: "2026-09-15",
       },
     }),
   ];
@@ -124,6 +128,7 @@ test("error fares compare the same origin-destination pair", () => {
         stops: [],
         layoverMinutes: 0,
         airlines: [{ code: "AA", name: "American" }],
+        date: "2026-09-15",
       },
     }),
   ];
@@ -144,4 +149,5 @@ test("date hints only keep real error drops", () => {
   assert.equal(hints[0].days, 5);
   assert.equal(hints[0].savedEur, 160);
   assert.deepEqual(altOffsetsFor("ANY", "FCO"), []);
+  assert.deepEqual(altOffsetsFor("BCN", "FCO", true), []);
 });

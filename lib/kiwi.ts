@@ -65,6 +65,11 @@ type Seg = {
 
 type Sector = { duration?: number; sectorSegments?: Seg[] };
 
+function isoDay(iso?: string): string {
+  if (!iso || !iso.includes("T")) return "";
+  return iso.split("T")[0];
+}
+
 function clock(iso?: string): string {
   if (!iso || !iso.includes("T")) return "--:--";
   return iso.split("T")[1].slice(0, 5);
@@ -107,6 +112,7 @@ function parseLeg(sector: Sector | undefined): Leg | null {
     stops,
     layoverMinutes,
     airlines,
+    date: isoDay(first.source?.localTime),
   };
 }
 
@@ -217,6 +223,7 @@ export async function fetchKiwiFlights(p: {
   origin: string;
   dest: string;
   date: string;
+  dateTo?: string | null;
   returnDate?: string | null;
   adults: number;
   cabin: Cabin;
@@ -249,6 +256,7 @@ async function fetchKiwiOnce(p: {
   origin: string;
   dest: string;
   date: string;
+  dateTo?: string | null;
   returnDate?: string | null;
   adults: number;
   cabin: Cabin;
@@ -257,10 +265,11 @@ async function fetchKiwiOnce(p: {
 }): Promise<LiveFlight[]> {
   const roundTrip = Boolean(p.returnDate);
   const destId = kiwiPlaceId(p.dest);
+  const endDay = p.dateTo && p.dateTo > p.date ? p.dateTo : p.date;
   const itinerary: Record<string, unknown> = {
     source: { ids: [p.origin] },
     destination: { ids: [destId] },
-    outboundDepartureDate: { start: `${p.date}T00:00:00`, end: `${p.date}T23:59:59` },
+    outboundDepartureDate: { start: `${p.date}T00:00:00`, end: `${endDay}T23:59:59` },
   };
   if (p.returnDate) {
     itinerary.inboundDepartureDate = {

@@ -12,8 +12,8 @@ export default function HomePage() {
           </div>
         </div>
         <p>
-          Busca origen y destino concretos, o cualquiera de los dos (o los dos). Lo primero: tarifas
-          error y descuentos brutales.
+          Busca origen y destino concretos, o cualquiera de los dos (o los dos). Un día, un mes
+          entero o fechas flexibles desde–hasta. Lo primero: tarifas error y descuentos brutales.
         </p>
         <div className="stamp">precios reales</div>
       </header>

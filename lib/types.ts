@@ -1,6 +1,6 @@
 export type Cabin = "ECONOMY" | "PREMIUM_ECONOMY" | "BUSINESS" | "FIRST";
 
-export type EmptyReason = "unknown_route" | "same_airport" | "past_date" | "bad_return";
+export type EmptyReason = "unknown_route" | "same_airport" | "past_date" | "bad_return" | "bad_range";
 
 export const ANY_DEST = "ANY";
 
@@ -17,6 +17,7 @@ export type Leg = {
   stops: string[];
   layoverMinutes: number;
   airlines: Airline[];
+  date: string;
 };
 
 export type LiveFlight = {
@@ -38,6 +39,7 @@ export type SearchParams = {
   origin: string;
   dest: string;
   date: string;
+  dateTo: string;
   returnDate: string | null;
   adults: number;
   cabin: Cabin;
@@ -86,12 +88,23 @@ export function defaultDate(offset = 21): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export function referenceDate(outbound: string, now = new Date()): { date: string; label: string } {
-  const weekBefore = addDays(outbound, -7);
-  if (!isPastDate(weekBefore, now)) {
-    return { date: weekBefore, label: "hace 7 días (misma ruta)" };
+export function referenceWindow(
+  start: string,
+  end: string,
+  now = new Date(),
+): { date: string; dateTo: string; label: string } {
+  const flex = isFlexible(start, end);
+  const back = shiftWindow(start, end, -7);
+  if (!isPastDate(back.date, now)) {
+    return { ...back, label: flex ? "hace 7 días (misma ventana)" : "hace 7 días (misma ruta)" };
   }
-  return { date: addDays(outbound, 7), label: "una semana después (misma ruta)" };
+  const fwd = shiftWindow(start, end, 7);
+  return { ...fwd, label: flex ? "una semana después (misma ventana)" : "una semana después (misma ruta)" };
+}
+
+export function referenceDate(outbound: string, now = new Date()): { date: string; label: string } {
+  const ref = referenceWindow(outbound, outbound, now);
+  return { date: ref.date, label: ref.label };
 }
 
 export function errorCompare(nowPrice: number | null, refPrice: number | null): {
@@ -104,6 +117,47 @@ export function errorCompare(nowPrice: number | null, refPrice: number | null): 
   const savedEur = Math.max(0, Math.round(refPrice - nowPrice));
   const looksLikeError = nowPrice <= refPrice * 0.75 && savedEur >= 25;
   return { savedEur, looksLikeError };
+}
+
+export function todayIso(now = new Date()): string {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+export function isFlexible(date: string, dateTo: string | null | undefined): boolean {
+  return Boolean(dateTo && dateTo !== date);
+}
+
+export function monthBounds(yyyyMm: string, now = new Date()): { start: string; end: string } | null {
+  if (!/^\d{4}-\d{2}$/.test(yyyyMm)) return null;
+  const [y, m] = yyyyMm.split("-").map(Number);
+  const start = `${y}-${String(m).padStart(2, "0")}-01`;
+  const last = new Date(y, m, 0).getDate();
+  const end = `${y}-${String(m).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
+  if (isPastDate(end, now)) return null;
+  const clamped = isPastDate(start, now) ? todayIso(now) : start;
+  return { start: clamped, end };
+}
+
+export function defaultMonth(now = new Date()): string {
+  const d = new Date(now.getFullYear(), now.getMonth(), 1);
+  if (now.getDate() > 20) d.setMonth(d.getMonth() + 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export function upcomingMonths(count = 12, now = new Date()): { value: string; label: string }[] {
+  const fmt = new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric" });
+  const out: { value: string; label: string }[] = [];
+  for (let i = 0; i < count; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const label = fmt.format(d);
+    out.push({ value, label: label.charAt(0).toUpperCase() + label.slice(1) });
+  }
+  return out;
+}
+
+export function shiftWindow(start: string, end: string, days: number): { date: string; dateTo: string } {
+  return { date: addDays(start, days), dateTo: addDays(end, days) };
 }
 
 export const ALT_OFFSETS = [2, 3, 5, 7, 10, 15] as const;

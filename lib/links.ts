@@ -19,6 +19,7 @@ export function googleFlightsUrl(p: {
   origin: string;
   dest: string;
   date: string;
+  dateTo?: string | null;
   returnDate?: string | null;
   adults: number;
   cabin: Cabin;
@@ -27,9 +28,9 @@ export function googleFlightsUrl(p: {
   const anyOrigin = isAnywhere(p.origin);
   const anyDest = isAnywhere(p.dest);
   const people = `${p.adults} adulto${p.adults === 1 ? "" : "s"}`;
-  const trip = p.returnDate
-    ? `ida ${p.date} vuelta ${p.returnDate}`
-    : `el ${p.date} solo ida`;
+  const flex = Boolean(p.dateTo && p.dateTo !== p.date);
+  const outbound = flex ? `entre ${p.date} y ${p.dateTo}` : `el ${p.date}`;
+  const trip = p.returnDate ? `ida ${outbound} vuelta ${p.returnDate}` : `${outbound} solo ida`;
   let q: string;
   if (anyOrigin && anyDest) q = `Vuelos baratos ${trip}, ${people}, clase ${CABIN_ES[p.cabin]}`;
   else if (anyOrigin) q = `Vuelos a ${p.dest} ${trip}, ${people}, clase ${CABIN_ES[p.cabin]}`;
@@ -43,11 +44,14 @@ export function skyscannerUrl(p: {
   origin: string;
   dest: string;
   date: string;
+  dateTo?: string | null;
   returnDate?: string | null;
   adults: number;
   cabin: Cabin;
 }): string {
-  const out = skyDate(p.date);
+  const flex = Boolean(p.dateTo && p.dateTo !== p.date);
+  const sameMonth = flex && p.dateTo?.slice(0, 7) === p.date.slice(0, 7);
+  const out = sameMonth ? p.date.slice(2, 7).replace("-", "") : skyDate(p.date);
   const ret = p.returnDate ? `${skyDate(p.returnDate)}/` : "";
   const rtn = p.returnDate ? "1" : "0";
   const anyOrigin = isAnywhere(p.origin);
@@ -69,13 +73,15 @@ export function kiwiSearchUrl(p: {
   origin: string;
   dest: string;
   date: string;
+  dateTo?: string | null;
   returnDate?: string | null;
   adults: number;
 }): string {
   const ret = p.returnDate ?? "no-return";
   const o = isAnywhere(p.origin) ? "anywhere" : p.origin.toLowerCase();
   const d = isAnywhere(p.dest) ? "anywhere" : p.dest.toLowerCase();
-  return `https://www.kiwi.com/es/search/results/${o}/${d}/${p.date}/${ret}?adults=${p.adults}`;
+  const out = p.dateTo && p.dateTo !== p.date ? `${p.date}_${p.dateTo}` : p.date;
+  return `https://www.kiwi.com/es/search/results/${o}/${d}/${out}/${ret}?adults=${p.adults}`;
 }
 
 export function kiwiBookingUrl(path: string): string {
