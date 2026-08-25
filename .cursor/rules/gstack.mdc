@@ -1,0 +1,12 @@
+---
+description: gstack only — virtual engineering team
+alwaysApply: true
+---
+
+# gstack
+
+Use **gstack skills only** (`gstack-*` on this machine: office-hours, autoplan, plan-ceo-review, review, qa, cso, ship, investigate, …).
+
+Do not use Ponytail or any other skill, agent, or playbook. You are already in Cursor; never tell the user to open Claude Code.
+
+Telegram/headless: do not use AskUserQuestion; pick the recommended option and continue.
