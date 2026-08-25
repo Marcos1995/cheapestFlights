@@ -41,6 +41,51 @@ export function routeKey(flight: LiveFlight): string {
   return `${flight.outbound.from}-${flight.ticketedDest}`;
 }
 
+export function typicalByRoute(flights: LiveFlight[]): Map<string, number> {
+  const groups = new Map<string, number[]>();
+  for (const f of flights) {
+    const k = routeKey(f);
+    const arr = groups.get(k) ?? [];
+    arr.push(f.priceEur);
+    groups.set(k, arr);
+  }
+  const map = new Map<string, number>();
+  for (const [k, prices] of groups) {
+    if (prices.length < 2) continue;
+    prices.sort((a, b) => a - b);
+    const idx = Math.min(prices.length - 1, Math.floor(prices.length * 0.75));
+    map.set(k, prices[idx]);
+  }
+  return map;
+}
+
+export function filterScan(
+  flights: LiveFlight[],
+  p: {
+    origin: string;
+    dest: string;
+    date: string;
+    dateTo: string;
+    airline: string;
+    maxLayoverHours: number;
+  },
+): LiveFlight[] {
+  const cap = p.maxLayoverHours * 60;
+  const origin = p.origin.trim().toUpperCase();
+  const dest = p.dest.trim().toUpperCase();
+  return flights.filter((f) => {
+    if (origin && !isAnywhere(origin) && f.outbound.from !== origin) return false;
+    if (dest && !isAnywhere(dest) && f.ticketedDest !== dest && !f.outbound.stops.includes(dest)) {
+      return false;
+    }
+    if (p.date && f.outbound.date && f.outbound.date < p.date) return false;
+    if (p.dateTo && f.outbound.date && f.outbound.date > p.dateTo) return false;
+    if (p.airline && !f.airlines.some((a) => a.code === p.airline)) return false;
+    if (f.stopCount > 0 && f.layoverMinutes > cap) return false;
+    return true;
+  });
+}
+
 export function cheapestByRoute(flights: LiveFlight[]): Map<string, number> {
   const map = new Map<string, number>();
   for (const f of flights) {
@@ -123,7 +168,7 @@ export function rankFlights(
   bags: number,
 ): { error: DealHit[]; detour: DetourHit[]; discount: DealHit[]; hidden: HiddenHit[]; normal: LiveFlight[] } {
   const cheapestNow = cheapestByRoute(now);
-  const cheapestRef = cheapestByRoute(ref);
+  const cheapestRef = ref.length ? cheapestByRoute(ref) : typicalByRoute(now);
   const directs = cheapestDirectByRoute(now);
   const error: DealHit[] = [];
   const detour: DetourHit[] = [];

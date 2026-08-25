@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { altOffsetsFor, dateHints, hiddenCityOf, legalDetourOf, rankFlights } from "./rank";
+import { altOffsetsFor, dateHints, filterScan, hiddenCityOf, legalDetourOf, rankFlights, typicalByRoute } from "./rank";
 import type { LiveFlight } from "./types";
 
 function flight(partial: Partial<LiveFlight> & Pick<LiveFlight, "id" | "priceEur" | "ticketedDest">): LiveFlight {
@@ -205,4 +205,45 @@ test("legal detour needs a real save vs the direct to the same city", () => {
   });
   assert.equal(legalDetourOf(stop, "FCO", new Map([["BCN-FCO", 200]]))?.savedEur, 50);
   assert.equal(legalDetourOf(stop, "FCO", new Map([["BCN-FCO", 160]])), null);
+});
+
+test("in-scan typical price needs two fares on the same route", () => {
+  const cheap = flight({ id: "a", priceEur: 80, ticketedDest: "FCO" });
+  const dear = flight({ id: "b", priceEur: 200, ticketedDest: "FCO" });
+  const typical = typicalByRoute([cheap, dear]);
+  assert.equal(typical.get("BCN-FCO"), 200);
+  assert.equal(typicalByRoute([cheap]).size, 0);
+});
+
+test("filterScan keeps origin, dest-or-stop, and date window", () => {
+  const via = flight({
+    id: "via",
+    priceEur: 90,
+    ticketedDest: "RGS",
+    stopCount: 1,
+    outbound: {
+      from: "BCN",
+      to: "RGS",
+      fromName: "Barcelona",
+      toName: "Burgos",
+      depart: "08:00",
+      arrive: "14:00",
+      durationMin: 360,
+      stops: ["FCO"],
+      layoverMinutes: 80,
+      airlines: [{ code: "IB", name: "Iberia" }],
+      date: "2026-09-15",
+    },
+  });
+  const other = flight({ id: "mad", priceEur: 70, ticketedDest: "MAD" });
+  const out = filterScan([via, other], {
+    origin: "BCN",
+    dest: "FCO",
+    date: "2026-09-01",
+    dateTo: "2026-09-30",
+    airline: "",
+    maxLayoverHours: 12,
+  });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].id, "via");
 });

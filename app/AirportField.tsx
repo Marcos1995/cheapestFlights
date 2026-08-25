@@ -22,6 +22,7 @@ export function AirportField({
       ? "De cualquier aeropuerto del mundo"
       : "Asia, Europa, América… el más barato primero";
   const [text, setText] = useState(() => {
+    if (!value) return "";
     if (value === "ANY") return anywhereTitle;
     const a = getAirport(value);
     return a ? labelAirport(a) : value;
@@ -30,12 +31,17 @@ export function AirportField({
   const box = useRef<HTMLLabelElement>(null);
 
   useEffect(() => {
+    if (!value) {
+      setText("");
+      return;
+    }
     if (value === "ANY") {
       setText(anywhereTitle);
       return;
     }
     const a = getAirport(value);
     if (a) setText(labelAirport(a));
+    else setText(value);
   }, [value, anywhereTitle]);
 
   useEffect(() => {
@@ -46,7 +52,7 @@ export function AirportField({
     return () => document.removeEventListener("mousedown", close);
   }, []);
 
-  const hits = searchAirports(text, 8);
+  const hits = searchAirports(text, 12);
 
   function pick(a: Airport) {
     onChange(a.iata);
@@ -61,18 +67,28 @@ export function AirportField({
   }
 
   function commitTyped() {
-    const q = text.trim().toLowerCase();
+    const raw = text.trim();
+    if (!raw) {
+      onChange("");
+      return;
+    }
+    const q = raw.toLowerCase();
     if (allowAnywhere && /cualquier|anywhere|mundo|asia|europa|am[eé]rica/.test(q)) {
       pickAnywhere();
       return;
     }
-    const exact = getAirport(text.trim().toUpperCase());
+    const exact = getAirport(raw.toUpperCase());
     if (exact) {
       pick(exact);
       return;
     }
-    const first = searchAirports(text, 1)[0];
-    if (first && text.trim()) pick(first);
+    if (/^[A-Za-z]{3}$/.test(raw)) {
+      onChange(raw.toUpperCase());
+      setOpen(false);
+      return;
+    }
+    const first = searchAirports(raw, 1)[0];
+    if (first) pick(first);
   }
 
   return (
@@ -81,7 +97,7 @@ export function AirportField({
       <input
         value={text}
         autoComplete="off"
-        placeholder="ciudad o IATA"
+        placeholder=""
         onChange={(e) => {
           setText(e.target.value);
           setOpen(true);

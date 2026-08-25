@@ -1,29 +1,19 @@
 "use client";
 
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AirportField } from "./AirportField";
 import { getAirport, labelAirport } from "@/lib/airports";
-import { fetchKiwiFlights, filterFlights } from "@/lib/kiwi";
+import { scanWorld } from "@/lib/kiwi";
 import { airlineLogo, googleFlightsUrl, kiwiSearchUrl, skyscannerUrl } from "@/lib/links";
-import { altOffsetsFor, dateHints, rankFlights } from "@/lib/rank";
+import { filterScan, rankFlights } from "@/lib/rank";
 import {
-  addDays,
-  defaultDate,
-  defaultMonth,
+  horizonDate,
   isAnywhere,
-  isFlexible,
   isPastDate,
-  monthBounds,
-  referenceWindow,
-  shiftReturn,
-  upcomingMonths,
-  type Cabin,
-  type EmptyReason,
-  type LiveFlight,
+  todayIso,
   type SearchParams,
+  type LiveFlight,
 } from "@/lib/types";
-
-type DateMode = "day" | "range" | "month";
 
 const AIRLINES = [
   { code: "", name: "Todas" },
@@ -59,29 +49,6 @@ function minutesLabel(min: number): string {
   return m ? `${h} h ${m} min` : `${h} h`;
 }
 
-const EMPTY: Record<EmptyReason, string> = {
-  past_date: "Esa fecha ya pasó. Elige un día de hoy en adelante.",
-  unknown_route: "Ese aeropuerto no está en la red. Prueba un IATA (BCN, JFK, NRT…).",
-  same_airport: "Origen y destino no pueden ser el mismo.",
-  bad_return: "La vuelta tiene que ser el mismo día de la ida o después.",
-  bad_range: "Hasta tiene que ser el mismo día de Desde o después.",
-};
-
-function resolvedWhen(
-  mode: DateMode,
-  date: string,
-  dateTo: string,
-  month: string,
-): { date: string; dateTo: string } {
-  if (mode === "day") return { date, dateTo: date };
-  if (mode === "month") {
-    const bounds = monthBounds(month);
-    if (!bounds) return { date, dateTo: date };
-    return { date: bounds.start, dateTo: bounds.end };
-  }
-  return { date, dateTo: dateTo < date ? date : dateTo };
-}
-
 function dayLabel(iso: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
   const [y, m, d] = iso.split("-").map(Number);
@@ -90,16 +57,6 @@ function dayLabel(iso: string): string {
     day: "numeric",
     month: "short",
   }).format(new Date(y, m - 1, d));
-}
-
-function validate(p: SearchParams, now = new Date()): EmptyReason | null {
-  if (!p.dateTo || p.dateTo < p.date) return "bad_range";
-  if (isPastDate(p.date, now)) return "past_date";
-  if (!isAnywhere(p.origin) && !getAirport(p.origin)) return "unknown_route";
-  if (!isAnywhere(p.dest) && !getAirport(p.dest)) return "unknown_route";
-  if (!isAnywhere(p.origin) && !isAnywhere(p.dest) && p.origin === p.dest) return "same_airport";
-  if (p.returnDate && (isPastDate(p.returnDate, now) || p.returnDate < p.dateTo)) return "bad_return";
-  return null;
 }
 
 function pinParams(params: SearchParams, flight: LiveFlight): SearchParams {
@@ -111,25 +68,6 @@ function pinParams(params: SearchParams, flight: LiveFlight): SearchParams {
     date: day,
     dateTo: day,
   };
-}
-
-function SourceLinks({ p, airlineName }: { p: SearchParams; airlineName?: string }) {
-  const g = googleFlightsUrl({ ...p, airlineName });
-  const s = skyscannerUrl(p);
-  const k = kiwiSearchUrl(p);
-  return (
-    <div className="book-row">
-      <a className="book google" href={g} target="_blank" rel="noopener noreferrer">
-        Ver en Google Flights
-      </a>
-      <a className="book sky" href={s} target="_blank" rel="noopener noreferrer">
-        Ver en Skyscanner
-      </a>
-      <a className="book kiwi" href={k} target="_blank" rel="noopener noreferrer">
-        Buscar en Kiwi
-      </a>
-    </div>
-  );
 }
 
 function FlightCard({
@@ -153,7 +91,7 @@ function FlightCard({
     <article className={`card ${hard ? "hidden_city" : flight.stopCount ? "detour" : "simple"}`}>
       <div className="card-top">
         <div>
-          <span className={`badge ${hard ? "hard" : saved ? "save" : flight.stopCount ? "save" : ""}`}>{tag}</span>
+          <span className={`badge ${hard ? "hard" : saved ? "save" : ""}`}>{tag}</span>
           <div className="logos">
             {flight.airlines.map((a) => (
               <img
@@ -174,7 +112,7 @@ function FlightCard({
               <b>{flight.outbound.depart}</b>
               <small>
                 {flight.outbound.date ? `${dayLabel(flight.outbound.date)} · ` : ""}
-                sale {pinned.origin} → {pinned.dest}
+                {flight.outbound.from} → {hard ? pinned.dest : flight.ticketedDest}
               </small>
             </div>
             <div>
@@ -185,54 +123,28 @@ function FlightCard({
               </small>
             </div>
           </div>
-          {flight.inbound && (
-            <div className="times inbound">
-              <div>
-                <b>{flight.inbound.depart}</b>
-                <small>{flight.inbound.date ? `${dayLabel(flight.inbound.date)} · ` : ""}vuelta</small>
-              </div>
-              <div>
-                <b>{flight.inbound.arrive}</b>
-                <small>llega · {minutesLabel(flight.inbound.durationMin)}</small>
-              </div>
-            </div>
-          )}
         </div>
         <div className="price">
           {euro(flight.priceEur)}
           <span>
-            {saved && saved > 0 ? `ahorras ${euro(saved)} vs el precio normal` : "precio real · Kiwi.com"}
+            {saved && saved > 0 ? `ahorras ${euro(saved)} vs el vuelo “de verdad”` : "precio real · Kiwi.com"}
           </span>
         </div>
       </div>
-      <p className="explain">
-        {extra ??
-          (flight.stopCount
-            ? `Con escala (${minutesLabel(flight.layoverMinutes)} de espera). Precio vivo de Kiwi.`
-            : "Directo. Precio vivo de Kiwi.")}
-        {flight.selfTransfer && !hard ? " Puede ser auto-transferencia (más de una aerolínea)." : ""}
-      </p>
+      <p className="explain">{extra}</p>
       <div className="book-row">
         <a className="book primary" href={flight.bookingUrl} target="_blank" rel="noopener noreferrer">
           Reservar este precio
         </a>
         <a
           className="book google"
-          href={googleFlightsUrl({
-            ...pinned,
-            airlineName: flight.airlines[0]?.name,
-          })}
+          href={googleFlightsUrl({ ...pinned, airlineName: flight.airlines[0]?.name })}
           target="_blank"
           rel="noopener noreferrer"
         >
           Comprobar en Google Flights
         </a>
-        <a
-          className="book sky"
-          href={skyscannerUrl(pinned)}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
+        <a className="book sky" href={skyscannerUrl(pinned)} target="_blank" rel="noopener noreferrer">
           Comprobar en Skyscanner
         </a>
       </div>
@@ -241,272 +153,94 @@ function FlightCard({
 }
 
 export function SearchBoard() {
-  const [origin, setOrigin] = useState("BCN");
-  const [dest, setDest] = useState("FCO");
-  const [roundTrip, setRoundTrip] = useState(false);
-  const [dateMode, setDateMode] = useState<DateMode>("day");
-  const [date, setDate] = useState(defaultDate);
-  const [dateTo, setDateTo] = useState(defaultDate);
-  const [month, setMonth] = useState(defaultMonth);
-  const [returnDate, setReturnDate] = useState(() => defaultDate(28));
-  const [adults, setAdults] = useState(1);
-  const [cabin, setCabin] = useState<Cabin>("ECONOMY");
-  const [maxLayoverHours, setMaxLayoverHours] = useState(4);
+  const [origin, setOrigin] = useState("");
+  const [dest, setDest] = useState("");
+  const [date, setDate] = useState(() => todayIso());
+  const [dateTo, setDateTo] = useState(() => horizonDate());
+  const [maxLayoverHours, setMaxLayoverHours] = useState(12);
   const [bags, setBags] = useState(0);
   const [airline, setAirline] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [empty, setEmpty] = useState<EmptyReason | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<"flights" | "error">("flights");
-  const [params, setParams] = useState<SearchParams | null>(null);
+  const [loading, setLoading] = useState(true);
   const [raw, setRaw] = useState<LiveFlight[]>([]);
-  const [rawRef, setRawRef] = useState<LiveFlight[]>([]);
-  const [hints, setHints] = useState<{ date: string; days: number; price: number; savedEur: number; kind: "error" | "discount" }[]>([]);
-  const [refMeta, setRefMeta] = useState<{ date: string; dateTo: string; label: string } | null>(null);
-  const req = useRef(0);
-  const months = useMemo(() => upcomingMonths(), []);
 
-  const destName = useMemo(() => {
-    if (isAnywhere(dest)) return "cualquier destino";
-    const a = getAirport(dest);
-    return a ? labelAirport(a) : dest;
-  }, [dest]);
-
-  const originName = useMemo(() => {
-    if (isAnywhere(origin)) return "cualquier origen";
-    const a = getAirport(origin);
-    return a ? labelAirport(a) : origin;
-  }, [origin]);
-
-  const when = resolvedWhen(dateMode, date, dateTo, month);
-  const current: SearchParams = {
+  const params: SearchParams = {
     origin,
     dest,
-    date: when.date,
-    dateTo: when.dateTo,
-    returnDate: roundTrip ? returnDate : null,
-    adults,
-    cabin,
+    date,
+    dateTo: dateTo < date ? date : dateTo,
+    returnDate: null,
+    adults: 1,
+    cabin: "ECONOMY",
     bags,
     maxLayoverHours,
     airline,
   };
 
-  const flights = useMemo(
-    () => filterFlights(raw, maxLayoverHours, airline),
-    [raw, maxLayoverHours, airline],
-  );
-  const refFlights = useMemo(
-    () => filterFlights(rawRef, maxLayoverHours, airline),
-    [rawRef, maxLayoverHours, airline],
+  useEffect(() => {
+    let live = true;
+    setLoading(true);
+    setError(null);
+    void scanWorld()
+      .then((list) => {
+        if (!live) return;
+        setRaw(list);
+      })
+      .catch((e) => {
+        if (!live) return;
+        setRaw([]);
+        setError(e instanceof Error ? e.message : "No se pudo leer Kiwi ahora mismo.");
+      })
+      .finally(() => {
+        if (live) setLoading(false);
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const filtered = useMemo(
+    () =>
+      filterScan(raw, {
+        origin,
+        dest,
+        date: isPastDate(date) ? todayIso() : date,
+        dateTo: dateTo < date ? date : dateTo,
+        airline,
+        maxLayoverHours,
+      }),
+    [raw, origin, dest, date, dateTo, airline, maxLayoverHours],
   );
   const ranked = useMemo(
-    () => rankFlights(flights, refFlights, params?.dest ?? dest, bags),
-    [flights, refFlights, params?.dest, dest, bags],
+    () => rankFlights(filtered, [], dest || "ANY", bags),
+    [filtered, dest, bags],
   );
-  const cheapest = flights[0] ?? null;
-  const cheapestDirect = flights.find((f) => f.stopCount === 0) ?? null;
-  const hasHack = ranked.error.length + ranked.detour.length + ranked.hidden.length > 0;
-  const hackIds = new Set([
-    ...ranked.error.map((h) => h.flight.id),
-    ...ranked.detour.map((h) => h.flight.id),
-    ...ranked.hidden.map((h) => h.flight.id),
-  ]);
 
-  async function run(next = current) {
-    setError(null);
-    const reason = validate(next);
-    setEmpty(reason);
-    setParams(next);
-    if (reason) {
-      setRaw([]);
-      setRawRef([]);
-      setHints([]);
-      return;
-    }
-    const id = ++req.current;
-    setLoading(true);
-    const flexible = isFlexible(next.date, next.dateTo);
-    const ref = referenceWindow(next.date, next.dateTo);
-    setRefMeta(ref);
-    try {
-      const [nowList, weekList, altLists] = await Promise.all([
-        fetchKiwiFlights(next),
-        fetchKiwiFlights({
-          ...next,
-          date: ref.date,
-          dateTo: ref.dateTo,
-          returnDate: next.returnDate ? shiftReturn(next.date, next.returnDate, ref.date) : null,
-        }).catch(() => [] as LiveFlight[]),
-        Promise.all(
-          altOffsetsFor(next.origin, next.dest, flexible).map(async (days) => {
-            const date = addDays(next.date, days);
-            if (isPastDate(date)) return { date, days, cheapest: null as number | null };
-            try {
-              const list = await fetchKiwiFlights({
-                ...next,
-                date,
-                dateTo: date,
-                returnDate: next.returnDate ? shiftReturn(next.date, next.returnDate, date) : null,
-                limit: 6,
-              });
-              return { date, days, cheapest: list[0]?.priceEur ?? null };
-            } catch {
-              return { date, days, cheapest: null as number | null };
-            }
-          }),
-        ),
-      ]);
-      if (id !== req.current) return;
-      setRaw(nowList);
-      setRawRef(weekList);
-      const refPrice = weekList[0]?.priceEur ?? null;
-      setHints(dateHints(altLists, refPrice));
-      setTab("flights");
-    } catch (e) {
-      if (id !== req.current) return;
-      setRaw([]);
-      setRawRef([]);
-      setHints([]);
-      setError(e instanceof Error ? e.message : "No se pudo leer Kiwi ahora mismo.");
-    } finally {
-      if (id === req.current) setLoading(false);
-    }
-  }
-
-  function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    void run();
-  }
+  const originName = origin && !isAnywhere(origin) ? (getAirport(origin) ? labelAirport(getAirport(origin)!) : origin) : "cualquier origen";
+  const destName = dest && !isAnywhere(dest) ? (getAirport(dest) ? labelAirport(getAirport(dest)!) : dest) : "cualquier destino";
 
   return (
     <>
-      <form className="search world" onSubmit={onSubmit}>
+      <form
+        className="search world"
+        onSubmit={(e) => {
+          e.preventDefault();
+        }}
+      >
         <AirportField label="Origen" value={origin} onChange={setOrigin} allowAnywhere anywhereKind="origin" />
         <AirportField label="Destino" value={dest} onChange={setDest} allowAnywhere anywhereKind="dest" />
         <label>
-          Tipo
-          <select
-            value={roundTrip ? "rt" : "ow"}
-            onChange={(e) => {
-              const rt = e.target.value === "rt";
-              setRoundTrip(rt);
-              if (rt && returnDate < when.dateTo) setReturnDate(addDays(when.dateTo, 7));
-            }}
-          >
-            <option value="ow">Solo ida</option>
-            <option value="rt">Ida y vuelta</option>
-          </select>
+          Desde
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </label>
         <label>
-          Cuándo
-          <select
-            value={dateMode}
-            onChange={(e) => {
-              const mode = e.target.value as DateMode;
-              setDateMode(mode);
-              if (mode === "day") setDateTo(date);
-              if (mode === "range") {
-                const end = !dateTo || dateTo === date ? addDays(date, 6) : dateTo;
-                setDateTo(end);
-                if (roundTrip && returnDate < end) setReturnDate(addDays(end, 7));
-              }
-              if (mode === "month") {
-                const fromDate = date.slice(0, 7);
-                const nextMonth = months.some((m) => m.value === fromDate) ? fromDate : defaultMonth();
-                setMonth(nextMonth);
-                const bounds = monthBounds(nextMonth);
-                if (bounds) {
-                  setDate(bounds.start);
-                  setDateTo(bounds.end);
-                  if (roundTrip && returnDate < bounds.end) setReturnDate(addDays(bounds.end, 7));
-                }
-              }
-            }}
-          >
-            <option value="day">Un día</option>
-            <option value="range">Fechas flexibles</option>
-            <option value="month">Un mes</option>
-          </select>
-        </label>
-        {dateMode === "month" ? (
-          <label>
-            Mes
-            <select
-              value={month}
-              onChange={(e) => {
-                const value = e.target.value;
-                setMonth(value);
-                const bounds = monthBounds(value);
-                if (bounds) {
-                  setDate(bounds.start);
-                  setDateTo(bounds.end);
-                  if (roundTrip && returnDate < bounds.end) setReturnDate(addDays(bounds.end, 7));
-                }
-              }}
-            >
-              {months.map((m) => (
-                <option key={m.value} value={m.value}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : dateMode === "range" ? (
-          <>
-            <label>
-              Desde
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-            </label>
-            <label>
-              Hasta
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => {
-                  const end = e.target.value;
-                  setDateTo(end);
-                  if (roundTrip && returnDate < end) setReturnDate(addDays(end, 7));
-                }}
-                required
-              />
-            </label>
-          </>
-        ) : (
-          <label>
-            Ida
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-          </label>
-        )}
-        {roundTrip && (
-          <label>
-            Vuelta
-            <input type="date" value={returnDate} onChange={(e) => setReturnDate(e.target.value)} required />
-          </label>
-        )}
-        <label>
-          Pasajeros
-          <select value={String(adults)} onChange={(e) => setAdults(Number(e.target.value))}>
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-              <option key={n} value={n}>
-                {n} adulto{n === 1 ? "" : "s"}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Clase
-          <select value={cabin} onChange={(e) => setCabin(e.target.value as Cabin)}>
-            <option value="ECONOMY">Turista</option>
-            <option value="PREMIUM_ECONOMY">Turista premium</option>
-            <option value="BUSINESS">Business</option>
-            <option value="FIRST">Primera</option>
-          </select>
+          Hasta
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
         </label>
         <label>
           Espera máx. escala
           <select value={String(maxLayoverHours)} onChange={(e) => setMaxLayoverHours(Number(e.target.value))}>
-            {[1, 2, 3, 4, 6, 8, 12].map((h) => (
+            {[2, 4, 6, 8, 12, 18, 24].map((h) => (
               <option key={h} value={h}>
                 {h} h
               </option>
@@ -533,249 +267,86 @@ export function SearchBoard() {
             ))}
           </select>
         </label>
-        <button type="submit" disabled={loading}>
-          {loading ? "Buscando…" : "Buscar"}
-        </button>
       </form>
       <p className="ref">
-        Precios reales de Kiwi.com. No es un listado tipo Skyscanner: si no hay desvío, se indica y se
-        abre Google Flights o Skyscanner. Los kilos exactos se eligen en el checkout.
+        Al abrir se hace una sola pasada: hoy → ~11 meses, varios orígenes, cualquier destino. Aquí solo
+        filtras. Solo salen tarifa error o ciudad oculta (te bajas en la escala). Si no hay, no hay listado
+        tipo Skyscanner.
       </p>
       {error && (
         <p className="error">
-          {error} Puedes abrir igual los buscadores oficiales abajo.
+          {error}{" "}
+          <a href={googleFlightsUrl(params)} target="_blank" rel="noopener noreferrer">
+            Google Flights
+          </a>
+          .
         </p>
       )}
-      {empty && <p className="empty">{EMPTY[empty]}</p>}
 
-      {params && !empty && (
+      {loading && <p className="banner">Una sola búsqueda en marcha: orígenes del mundo, hoy hacia adelante…</p>}
+
+      {!loading && (
         <div className="results">
-          <SourceLinks p={params} />
-          <div className="tabs">
-            <button type="button" className={tab === "flights" ? "on" : ""} onClick={() => setTab("flights")}>
-              Vuelos
-            </button>
-            <button type="button" className={tab === "error" ? "on" : ""} onClick={() => setTab("error")}>
-              Bajadas
-              {ranked.error.length + ranked.discount.length
-                ? ` · ${ranked.error.length + ranked.discount.length}`
-                : ""}
-            </button>
-          </div>
-
-          {loading && <p className="banner">Buscando un desvío más barato que el directo…</p>}
-
-          {!loading && tab === "error" && ranked.error.length === 0 && ranked.discount.length === 0 && (
-            <p className="banner">
-              No hay una caída fuerte vs la semana de referencia
-              {params && isFlexible(params.date, params.dateTo) ? " en esta ventana" : " para esta fecha"}
-              {refFlights[0] && cheapest ? ` (ahora ${euro(cheapest.priceEur)} · hace una semana ${euro(refFlights[0].priceEur)})` : ""}.
-              {hints.length > 0 ? " Sí las hay en otras fechas:" : ""}
-              {hints.map((h) => (
-                <button
-                  key={h.date}
-                  type="button"
-                  className="date-chip"
-                  onClick={() => {
-                    setDateMode("day");
-                    setDate(h.date);
-                    setDateTo(h.date);
-                    if (params?.returnDate) setReturnDate(shiftReturn(params.date, params.returnDate, h.date));
-                    void run({
-                      ...current,
-                      date: h.date,
-                      dateTo: h.date,
-                      returnDate: current.returnDate
-                        ? shiftReturn(current.date, current.returnDate, h.date)
-                        : null,
-                    });
-                  }}
-                >
-                  dentro de {h.days} días · {h.date} · {euro(h.price)}
-                </button>
-              ))}
-            </p>
-          )}
-
-          {tab === "flights" && !loading && (
-            <>
-              {flights.length === 0 ? (
-                <p className="empty">Kiwi no devolvió vuelos para esos filtros. Prueba otra fecha o abre Google Flights.</p>
-              ) : !hasHack ? (
-                <section className="block">
-                  <p className="banner">
-                    Hoy no hay desvío en {originName} → {destName}: ni escala más barata que el directo, ni
-                    ciudad oculta, ni tarifa error. Esto es lo mismo que verías en Google Flights o Skyscanner.
-                  </p>
-                  {cheapest && (
-                    <FlightCard
-                      flight={cheapest}
-                      params={params}
-                      tag={cheapest.stopCount ? "precio normal · con escala" : "precio normal · directo"}
-                      extra="No es un desvío. Ábrelo en Google Flights o Skyscanner si quieres el listado completo."
-                    />
-                  )}
-                  <SourceLinks p={params} />
-                </section>
-              ) : (
-                <>
-                  {ranked.error.length > 0 && (
-                    <section className="block">
-                      <h2>Tarifa error</h2>
-                      <p className="ref">
-                        Mitad de precio o menos, y al menos 80 € menos que hace una semana.
-                      </p>
-                      {ranked.error.map((hit) => (
-                        <FlightCard
-                          key={hit.flight.id}
-                          flight={hit.flight}
-                          params={params}
-                          tag={`tarifa error · −${hit.savePct}%`}
-                          saved={hit.savedEur}
-                          extra={`Ahora ${euro(hit.flight.priceEur)} frente a ${euro(hit.refPrice)} la semana de referencia.`}
-                        />
-                      ))}
-                    </section>
-                  )}
-
-                  {ranked.detour.length > 0 && (
-                    <section className="block">
-                      <h2>Desvío: más barato con escala</h2>
-                      <p className="ref">
-                        Vuelas todos los tramos. Sale al menos 25 € menos que el directo al mismo destino. Eso
-                        es lo que Google Flights suele enterrar.
-                      </p>
-                      {ranked.detour.map((hit) => (
-                        <FlightCard
-                          key={hit.flight.id}
-                          flight={hit.flight}
-                          params={params}
-                          tag={`desvío · ahorras ${euro(hit.savedEur)}`}
-                          saved={hit.savedEur}
-                          extra={`Escala en ${hit.flight.outbound.stops.join(", ") || "conexión"}. ${euro(hit.flight.priceEur)} frente a ${euro(hit.vsDirect)} el directo. Vuelas todos los tramos.${hit.flight.selfTransfer ? " Puede ser auto-transferencia." : ""}`}
-                        />
-                      ))}
-                    </section>
-                  )}
-
-                  {ranked.hidden.length > 0 && (
-                    <section className="block hidden-wrap">
-                      <h2>Ciudad oculta</h2>
-                      <p className="ref">
-                        Billete hasta más lejos; te bajas en la escala y no vuelas el último tramo. La aerolínea
-                        lo prohíbe. Sin maleta facturada.
-                      </p>
-                      {ranked.hidden.map((hit) => (
-                        <FlightCard
-                          key={hit.flight.id}
-                          flight={hit.flight}
-                          params={params}
-                          tag="ciudad oculta"
-                          saved={hit.savedEur}
-                          hard
-                          extra={`Te bajas en ${hit.getOff} y no vuelas hasta ${hit.ticketed}. Sale ${euro(hit.savedEur)} más barato que un billete solo hasta ${hit.getOff}.`}
-                        />
-                      ))}
-                    </section>
-                  )}
-
-                  {cheapestDirect && !hackIds.has(cheapestDirect.id) && (
-                    <section className="block">
-                      <h2>El directo, para comparar</h2>
-                      <FlightCard
-                        flight={cheapestDirect}
-                        params={params}
-                        tag="directo"
-                        extra="El vuelo simple. El desvío de arriba existe porque sale más barato que esto."
-                      />
-                    </section>
-                  )}
-                </>
-              )}
-            </>
-          )}
-
-          {tab === "error" && !loading && (
-            <>
-              {ranked.error.length > 0 ? (
-                <p className="banner error-now">
-                  Hay {ranked.error.length} tarifa{ranked.error.length === 1 ? "" : "s"} error: mitad de precio o
-                  menos y al menos 80 € vs la semana de referencia.
-                </p>
-              ) : ranked.discount.length > 0 ? (
-                <p className="banner">
-                  No hay tarifa error. Sí hay gran descuento (≥25 % y ≥25 € vs hace una semana), que no es un
-                  error de la aerolínea.
-                </p>
-              ) : (
-                <p className="banner">
-                  No hay tarifa error ni gran descuento
-                  {params && isFlexible(params.date, params.dateTo) ? " en esta ventana" : " para esta fecha"}.
-                  {hints.length > 0 ? " Revisa estas otras:" : " Tampoco aparecen en +2 a +15 días."}
-                </p>
-              )}
-              {hints.map((h) => (
-                <button
-                  key={h.date}
-                  type="button"
-                  className="date-chip"
-                  onClick={() => {
-                    setDateMode("day");
-                    setDate(h.date);
-                    setDateTo(h.date);
-                    void run({
-                      ...current,
-                      date: h.date,
-                      dateTo: h.date,
-                      returnDate: current.returnDate
-                        ? shiftReturn(current.date, current.returnDate, h.date)
-                        : null,
-                    });
-                  }}
-                >
-                  dentro de {h.days} días · {h.date} · {euro(h.price)} ·{" "}
-                  {h.kind === "error" ? "tarifa error" : "gran descuento"} · ahorras {euro(h.savedEur)}
-                </button>
-              ))}
-              {ranked.error.map((hit) => (
-                <FlightCard
-                  key={hit.flight.id}
-                  flight={hit.flight}
-                  params={params}
-                  tag={`tarifa error · −${hit.savePct}%`}
-                  saved={hit.savedEur}
-                  extra={`Vs ${euro(hit.refPrice)} ${refMeta?.label ?? "de referencia"}. Mitad o menos y ≥80 €.`}
-                />
-              ))}
-              {ranked.discount.map((hit) => (
-                <FlightCard
-                  key={hit.flight.id}
-                  flight={hit.flight}
-                  params={params}
-                  tag={`gran descuento · −${hit.savePct}%`}
-                  saved={hit.savedEur}
-                  extra={`Vs ${euro(hit.refPrice)} ${refMeta?.label ?? "de referencia"}. Oferta fuerte, no un error de tarifa.`}
-                />
-              ))}
-              {refFlights[0] && refMeta && (
-                <FlightCard
-                  flight={refFlights[0]}
-                  params={{
-                    ...params,
-                    date: refMeta.date,
-                    dateTo: refMeta.dateTo,
-                    returnDate: params.returnDate
-                      ? shiftReturn(params.date, params.returnDate, refMeta.date)
-                      : null,
-                  }}
-                  tag={`vuelo de referencia · ${refMeta.label}`}
-                />
-              )}
-              <p className="ref">
-                Tarifa error = ≤50 % del precio de hace una semana y al menos 80 € menos. Gran descuento =
-                ≥25 % y ≥25 €. Destino “cualquier sitio”: cada ciudad se compara consigo misma.
+          {ranked.error.length === 0 && ranked.hidden.length === 0 ? (
+            <section className="block">
+              <p className="banner">
+                En {originName} → {destName} no hay tarifa error ni ciudad oculta en esta pasada. No
+                enseñamos el vuelo “normal”: para eso está Google Flights o Skyscanner.
               </p>
-              <SourceLinks p={params} />
+              <div className="book-row">
+                <a className="book google" href={googleFlightsUrl(params)} target="_blank" rel="noopener noreferrer">
+                  Google Flights
+                </a>
+                <a className="book sky" href={skyscannerUrl(params)} target="_blank" rel="noopener noreferrer">
+                  Skyscanner
+                </a>
+                <a className="book kiwi" href={kiwiSearchUrl(params)} target="_blank" rel="noopener noreferrer">
+                  Kiwi
+                </a>
+              </div>
+            </section>
+          ) : (
+            <>
+              {ranked.error.length > 0 && (
+                <section className="block">
+                  <h2>Tarifa error</h2>
+                  <p className="ref">
+                    Mitad de precio o menos y al menos 80 € menos que el precio típico de esa misma ruta en
+                    esta pasada.
+                  </p>
+                  {ranked.error.map((hit) => (
+                    <FlightCard
+                      key={hit.flight.id}
+                      flight={hit.flight}
+                      params={params}
+                      tag={`tarifa error · ahorras ${euro(hit.savedEur)} (−${hit.savePct}%)`}
+                      saved={hit.savedEur}
+                      extra={`Ahora ${euro(hit.flight.priceEur)} frente a ${euro(hit.refPrice)} el precio típico de ${hit.flight.outbound.from}–${hit.flight.ticketedDest}.`}
+                    />
+                  ))}
+                </section>
+              )}
+              {ranked.hidden.length > 0 && (
+                <section className="block hidden-wrap">
+                  <h2>Ciudad oculta</h2>
+                  <p className="ref">
+                    El billete sigue hasta más lejos. Te bajas en la escala y no vuelas el último tramo. Sale
+                    más barato que el vuelo que sí termina donde te quieres quedar. La aerolínea lo prohíbe.
+                    Sin maleta facturada.
+                  </p>
+                  {ranked.hidden.map((hit) => (
+                    <FlightCard
+                      key={hit.flight.id}
+                      flight={hit.flight}
+                      params={{ ...params, dest: hit.getOff }}
+                      tag={`ciudad oculta · ahorras ${euro(hit.savedEur)}`}
+                      saved={hit.savedEur}
+                      hard
+                      extra={`Pagas ${euro(hit.flight.priceEur)} hasta ${hit.ticketed}, te bajas en ${hit.getOff} y no sigues. El vuelo “de verdad” solo hasta ${hit.getOff} cuesta ${euro(hit.flight.priceEur + hit.savedEur)}. Ahorras ${euro(hit.savedEur)}.`}
+                    />
+                  ))}
+                </section>
+              )}
             </>
           )}
         </div>

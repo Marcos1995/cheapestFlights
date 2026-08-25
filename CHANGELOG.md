@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.0
+
+One scan on load from today through the booking horizon. Filter locally. Show only error fares and hidden-city skips, with the euros saved. Empty origin/destination. Frankfurt Hahn included.
+
 ## 0.8.0
 
 Stop listing ordinary flights. Show legal detours (cheaper than the direct), hidden city, or error fares; otherwise admit Google Flights won.

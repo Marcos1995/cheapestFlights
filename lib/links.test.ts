@@ -7,6 +7,7 @@ import { addDays, errorCompare, isPastDate, kiwiPlaceId, monthBounds, referenceD
 test("kiwiPlaceId maps ANY to anywhere", () => {
   assert.equal(kiwiPlaceId("BCN"), "BCN");
   assert.equal(kiwiPlaceId("ANY"), "anywhere");
+  assert.equal(kiwiPlaceId(""), "anywhere");
 });
 
 test("isPastDate treats today as valid", () => {

@@ -25,11 +25,13 @@ export const AIRPORTS: Airport[] = [
   { iata: "CIA", city: "Roma", name: "Ciampino", country: "Italia", lat: 41.8, lng: 12.59 },
   { iata: "MXP", city: "Milán", name: "Malpensa", country: "Italia", lat: 45.63, lng: 8.72, hub: true },
   { iata: "LIN", city: "Milán", name: "Linate", country: "Italia", lat: 45.45, lng: 9.28 },
+  { iata: "BGY", city: "Milán", name: "Bérgamo Orio al Serio", country: "Italia", lat: 45.67, lng: 9.7 },
   { iata: "VCE", city: "Venecia", name: "Marco Polo", country: "Italia", lat: 45.51, lng: 12.35 },
   { iata: "NAP", city: "Nápoles", name: "Capodichino", country: "Italia", lat: 40.89, lng: 14.29 },
   { iata: "BLQ", city: "Bolonia", name: "Guglielmo Marconi", country: "Italia", lat: 44.54, lng: 11.29 },
   { iata: "CDG", city: "París", name: "Charles de Gaulle", country: "Francia", lat: 49.01, lng: 2.55, hub: true },
   { iata: "ORY", city: "París", name: "Orly", country: "Francia", lat: 48.72, lng: 2.36 },
+  { iata: "BVA", city: "París", name: "Beauvais", country: "Francia", lat: 49.45, lng: 2.11 },
   { iata: "NCE", city: "Niza", name: "Côte d'Azur", country: "Francia", lat: 43.66, lng: 7.22 },
   { iata: "LYS", city: "Lyon", name: "Saint-Exupéry", country: "Francia", lat: 45.73, lng: 5.08 },
   { iata: "MRS", city: "Marsella", name: "Provence", country: "Francia", lat: 43.44, lng: 5.22 },
@@ -37,15 +39,20 @@ export const AIRPORTS: Airport[] = [
   { iata: "LHR", city: "Londres", name: "Heathrow", country: "Reino Unido", lat: 51.47, lng: -0.45, hub: true },
   { iata: "LGW", city: "Londres", name: "Gatwick", country: "Reino Unido", lat: 51.15, lng: -0.19 },
   { iata: "STN", city: "Londres", name: "Stansted", country: "Reino Unido", lat: 51.89, lng: 0.26 },
+  { iata: "LTN", city: "Londres", name: "Luton", country: "Reino Unido", lat: 51.87, lng: -0.37 },
   { iata: "MAN", city: "Mánchester", name: "Manchester", country: "Reino Unido", lat: 53.35, lng: -2.27 },
   { iata: "EDI", city: "Edimburgo", name: "Edinburgh", country: "Reino Unido", lat: 55.95, lng: -3.37 },
   { iata: "AMS", city: "Ámsterdam", name: "Schiphol", country: "Países Bajos", lat: 52.31, lng: 4.76, hub: true },
   { iata: "EIN", city: "Eindhoven", name: "Eindhoven", country: "Países Bajos", lat: 51.45, lng: 5.37 },
   { iata: "FRA", city: "Fráncfort", name: "Frankfurt", country: "Alemania", lat: 50.04, lng: 8.56, hub: true },
+  { iata: "HHN", city: "Fráncfort", name: "Hahn", country: "Alemania", lat: 49.95, lng: 7.26 },
   { iata: "MUC", city: "Múnich", name: "Franz Josef Strauss", country: "Alemania", lat: 48.35, lng: 11.79, hub: true },
   { iata: "BER", city: "Berlín", name: "Brandenburg", country: "Alemania", lat: 52.37, lng: 13.5 },
   { iata: "DUS", city: "Düsseldorf", name: "Düsseldorf", country: "Alemania", lat: 51.29, lng: 6.77 },
+  { iata: "NRN", city: "Düsseldorf", name: "Weeze", country: "Alemania", lat: 51.6, lng: 6.14 },
   { iata: "HAM", city: "Hamburgo", name: "Hamburg", country: "Alemania", lat: 53.63, lng: 10.0 },
+  { iata: "CGN", city: "Colonia", name: "Konrad Adenauer", country: "Alemania", lat: 50.87, lng: 7.14 },
+  { iata: "STR", city: "Stuttgart", name: "Stuttgart", country: "Alemania", lat: 48.69, lng: 9.22 },
   { iata: "LIS", city: "Lisboa", name: "Humberto Delgado", country: "Portugal", lat: 38.77, lng: -9.13, hub: true },
   { iata: "OPO", city: "Oporto", name: "Sá Carneiro", country: "Portugal", lat: 41.24, lng: -8.68 },
   { iata: "FAO", city: "Faro", name: "Faro", country: "Portugal", lat: 37.01, lng: -7.97 },
@@ -55,6 +62,7 @@ export const AIRPORTS: Airport[] = [
   { iata: "GVA", city: "Ginebra", name: "Cointrin", country: "Suiza", lat: 46.24, lng: 6.11 },
   { iata: "VIE", city: "Viena", name: "Schwechat", country: "Austria", lat: 48.11, lng: 16.57, hub: true },
   { iata: "BRU", city: "Bruselas", name: "Zaventem", country: "Bélgica", lat: 50.9, lng: 4.48 },
+  { iata: "CRL", city: "Bruselas", name: "Charleroi", country: "Bélgica", lat: 50.46, lng: 4.45 },
   { iata: "CPH", city: "Copenhague", name: "Kastrup", country: "Dinamarca", lat: 55.62, lng: 12.65, hub: true },
   { iata: "OSL", city: "Oslo", name: "Gardermoen", country: "Noruega", lat: 60.19, lng: 11.1 },
   { iata: "ARN", city: "Estocolmo", name: "Arlanda", country: "Suecia", lat: 59.65, lng: 17.92, hub: true },
@@ -143,17 +151,29 @@ export function getAirport(iata: string): Airport | undefined {
   return BY_IATA.get(iata.toUpperCase());
 }
 
-export function searchAirports(query: string, limit = 8): Airport[] {
-  const q = query.trim().toLowerCase();
+function fold(s: string): string {
+  return s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+}
+
+export function searchAirports(query: string, limit = 12): Airport[] {
+  const q = fold(query.trim());
   if (!q) return AIRPORTS.filter((a) => a.hub).slice(0, limit);
-  return AIRPORTS.filter((a) => {
-    return (
-      a.iata.toLowerCase().includes(q) ||
-      a.city.toLowerCase().includes(q) ||
-      a.name.toLowerCase().includes(q) ||
-      a.country.toLowerCase().includes(q)
-    );
-  }).slice(0, limit);
+  const scored = AIRPORTS.map((a) => {
+    const iata = fold(a.iata);
+    const city = fold(a.city);
+    const name = fold(a.name);
+    const country = fold(a.country);
+    let score = 0;
+    if (iata === q) score = 100;
+    else if (iata.startsWith(q)) score = 80;
+    else if (city === q) score = 70;
+    else if (city.startsWith(q)) score = 60;
+    else if (city.includes(q) || name.includes(q) || iata.includes(q)) score = 40;
+    else if (country.includes(q)) score = 10;
+    return { a, score };
+  }).filter((x) => x.score > 0);
+  scored.sort((x, y) => y.score - x.score || x.a.iata.localeCompare(y.a.iata));
+  return scored.slice(0, limit).map((x) => x.a);
 }
 
 export function labelAirport(a: Airport): string {

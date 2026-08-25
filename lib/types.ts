@@ -49,7 +49,7 @@ export type SearchParams = {
 };
 
 export function isAnywhere(code: string): boolean {
-  return code === ANY_DEST || code.toLowerCase() === "anywhere";
+  return !code || code === ANY_DEST || code.toLowerCase() === "anywhere";
 }
 
 export function kiwiPlaceId(code: string): string {
@@ -125,6 +125,10 @@ export function errorCompare(nowPrice: number | null, refPrice: number | null): 
 
 export function todayIso(now = new Date()): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+export function horizonDate(now = new Date(), days = 330): string {
+  return addDays(todayIso(now), days);
 }
 
 export function isFlexible(date: string, dateTo: string | null | undefined): boolean {

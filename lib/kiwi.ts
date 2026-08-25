@@ -1,4 +1,14 @@
-import { isAnywhere, kiwiPlaceId, type Airline, type Cabin, type Leg, type LiveFlight } from "./types";
+import {
+  ANY_DEST,
+  horizonDate,
+  isAnywhere,
+  kiwiPlaceId,
+  todayIso,
+  type Airline,
+  type Cabin,
+  type Leg,
+  type LiveFlight,
+} from "./types";
 import { kiwiBookingUrl } from "./links";
 
 const ONEWAY = `query SearchOneWayItinerariesQuery($search: SearchOnewayInput, $filter: ItinerariesFilterInput, $options: ItinerariesOptionsInput) {
@@ -217,7 +227,41 @@ function options() {
   };
 }
 
-const ANY_ORIGIN_HUBS = ["BCN", "MAD", "LHR", "CDG", "AMS", "FRA", "JFK", "DXB"];
+const ANY_ORIGIN_HUBS = [
+  "BCN",
+  "MAD",
+  "AGP",
+  "LHR",
+  "LGW",
+  "STN",
+  "CDG",
+  "ORY",
+  "AMS",
+  "FRA",
+  "HHN",
+  "MUC",
+  "FCO",
+  "MXP",
+  "LIS",
+  "JFK",
+  "EWR",
+  "DXB",
+];
+
+export const SCAN_HORIZON_DAYS = 330;
+
+export async function scanWorld(now = new Date()): Promise<LiveFlight[]> {
+  return fetchKiwiFlights({
+    origin: ANY_DEST,
+    dest: ANY_DEST,
+    date: todayIso(now),
+    dateTo: horizonDate(now, SCAN_HORIZON_DAYS),
+    adults: 1,
+    cabin: "ECONOMY",
+    bags: 0,
+    limit: 40,
+  });
+}
 
 export async function fetchKiwiFlights(p: {
   origin: string;

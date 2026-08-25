@@ -2,9 +2,9 @@
 
 Web estática: busca **ida o ida y vuelta** entre aeropuertos reales.
 
-1. Precio **vivo** (Kiwi.com) y botón de reserva.
-2. El mismo trayecto en **Google Flights** y **Skyscanner** si no hay desvío.
-3. Resultados: desvío legal (escala más barata que el directo), ciudad oculta, tarifa error. Si no hay, se cede.
+1. Al abrir: **una** pasada Kiwi (hoy → ~11 meses).
+2. Filtras origen/destino/fechas sobre esos resultados.
+3. Solo **tarifa error** o **ciudad oculta**, con el ahorro. Si no hay, se cede a Google Flights.
 
 Pública: https://marcos1995.github.io/cheapestFlights/
 

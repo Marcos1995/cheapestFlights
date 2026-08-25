@@ -12,14 +12,14 @@ export default function HomePage() {
           </div>
         </div>
         <p>
-          No es Skyscanner. Busca un desvío: escala más barata que el directo (y sí la vuelas), ciudad
-          oculta, o tarifa error. Si no hay nada de eso, te lo decimos y te mandamos a Google Flights.
+          Al abrir ya se busca. Luego solo filtras. Únicamente tarifas error o ciudad oculta (te bajas en
+          la escala), con cuánto ahorras. Si no hay, no hay listado tipo Google Flights.
         </p>
         <div className="stamp">precios reales</div>
       </header>
       <SearchBoard />
       <p className="demo-note">
-        Precios en vivo vía Kiwi.com. Si no hay desvío, se cede a Google Flights y Skyscanner. Maqueta
+        Precios en vivo vía Kiwi.com. Una pasada al entrar; luego filtros. Maqueta
         estática: <Link href="/demo/tarifa-error">/demo/tarifa-error</Link>.
       </p>
     </main>
